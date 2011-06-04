@@ -23,7 +23,7 @@ MAPPING = {'stops': {'file': 'STOPS.dbf',
           }
 
 
-def parse(dbf_folder='.'):
+def parse(dbf_folder='./', destination_folder='./'):
 
     for f in MAPPING:
         feed = MAPPING[f]
@@ -47,6 +47,7 @@ def parse(dbf_folder='.'):
                 row.append(field_value)
             rows.append(row)
         if rows:
-            with open('%s.txt' % (output_name), 'w') as f:
+            with open('%s%s.txt' % (destination_folder,
+                                    output_name), 'w') as f:
                 writer = csv.writer(f)
                 writer.writerows(rows)
