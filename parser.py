@@ -4,6 +4,7 @@ import os
 
 
 def latlon_transformer(value):
+    '''Transforms latitude and longitude values to valid degree decimals'''
     return float(value) / 1000000
 
 MAPPING = {'stops': {'file': 'STOPS.dbf',
@@ -24,7 +25,7 @@ MAPPING = {'stops': {'file': 'STOPS.dbf',
 
 
 def parse(dbf_folder='./', destination_folder='./'):
-
+    '''Parse MTTA dbf files into Google Transit csv files'''
     for f in MAPPING:
         feed = MAPPING[f]
         db_f = dbfpy.dbf.Dbf('%s%s' % (dbf_folder, feed['file']),
