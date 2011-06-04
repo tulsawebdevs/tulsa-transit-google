@@ -15,3 +15,34 @@ stop_times.txt - Required. This file lists the times that a vehicle arrives at a
 
 calendar.txt - Required. This file defines dates for service IDs using a weekly schedule. Specify when service starts and ends, as well as days of the week where service is available.
 
+To get started:
+
+    ./bootstrap.py .     # Create virtual environment.  The trailing '.' is important
+    source bin/activate  # Activate the virtual environment
+    ./convert.py         # Convert from the dBase originals to SQLite output.pdb
+    deactivate           # Leave the virtual environment
+
+If bootstrap.py fails, try running ./make_bootstrap.py first.  To
+
+This will convert the Tulsa Transit Authority data in the originals folder to
+a sqlite database output.db.
+
+The data is from the Tulsa Transit Authority.  Luke has been in contact with
+Jeremy Luttrell and Monique Bizet.  We haven't gotten clearance to make this
+data publicly available, so please don't distribute yet.
+
+Here's the text of the email from April 08, 2011:
+
+    Here is the shapefile data for the March 2011 signup. The corrections
+    for the stop accuracy for the online trip planner are on the March
+    2011 CI signup which will be available in a few weeks. When it is
+    ready we will send it to you so your data is as accurate as possible.
+
+Other useful information:
+* http://www.ntdprogram.gov/ntdprogram/Glossary.htm
+* http://code.google.com/transit/spec/transit_feed_specification.html
+
+John Whitlock
+John-Whitlock@ieee.org
+
+On freenode: #tulsatransit
