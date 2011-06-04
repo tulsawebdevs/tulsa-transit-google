@@ -1,2 +1,17 @@
 The project starts!
-Matt was here!
+
+Required files for this project
+===============================
+
+agency.txt - Required. This file contains information about one or more transit agencies that provide the data in this feed.
+
+stops.txt - Required. This file contains information about individual locations where vehicles pick up or drop off passengers.
+
+routes.txt - Required. This file contains information about a transit organization's routes. A route is a group of trips that are displayed to riders as a single service.
+
+trips.txt - Required. This file lists all trips and their routes. A trip is a sequence of two or more stops that occurs at specific time.
+
+stop_times.txt - Required. This file lists the times that a vehicle arrives at and departs from individual stops for each trip.
+
+calendar.txt - Required. This file defines dates for service IDs using a weekly schedule. Specify when service starts and ends, as well as days of the week where service is available.
+
