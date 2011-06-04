@@ -23,7 +23,7 @@ MAPPING = {'stops': {'file': 'STOPS.dbf',
           }
 
 
-def parse(dbf_folder):
+def parse(dbf_folder='.'):
 
     for f in MAPPING:
         feed = MAPPING[f]
