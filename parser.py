@@ -24,10 +24,10 @@ MAPPING = {'stops': {'file': 'STOPS.dbf',
           }
 
 
-def parse(dbf_folder='./', destination_folder='./'):
+def parse(dbf_folder='./', destination_folder='./', mapping=MAPPING):
     '''Parse MTTA dbf files into Google Transit csv files'''
-    for f in MAPPING:
-        feed = MAPPING[f]
+    for f in mapping:
+        feed = mapping[f]
         db_f = dbfpy.dbf.Dbf('%s%s' % (dbf_folder, feed['file']),
                              readOnly=True)
         output_name = os.path.splitext(os.path.basename(f))[0]
