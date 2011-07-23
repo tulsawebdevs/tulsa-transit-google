@@ -11,18 +11,25 @@ def latlon_transformer(value):
     '''Transforms latitude and longitude values to valid degree decimals'''
     return float(value) / 1000000
 
-MAPPING = {'stops': {'file': 'STOPS.dbf',
+
+def convert_color(value):
+    '''Convert integer value into a hex color value'''
+    return '%06x' % value
+
+
+MAPPING = {'stops': {'file': 'STOPS/stops.dbf',
                      'fields': (('StopId', 'stop_id'),
                                 ('StopName', 'stop_name'),
                                 ('lat', 'stop_lat', latlon_transformer),
                                 ('lon', 'stop_lon', latlon_transformer),
                                 ('SiteName', 'stop_desc'),
                                 ('StopAbbr', 'stop_code'))},
-           'routes': {'file': 'LINES.dbf',
+           'routes': {'file': 'lines/line.dbf',
                       'fields': (('LineID', 'route_id'),
                                  ('LineAbbr', 'route_short_name'),
                                  ('LineName', 'route_long_name'),
-                                 ('', 'route_type', lambda x: 3))},
+                                 ('', 'route_type', lambda x: 3),
+                                 ('LineColor', 'route_color', convert_color))},
            #'calendar': {},
            #'trips': {},
           }
