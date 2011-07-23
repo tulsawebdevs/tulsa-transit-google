@@ -44,7 +44,11 @@ def parse_trapeze_stop_trips(text):
                         replace(' .',' (.').replace('. ','.) ')
                     
                     if pattern[-1] == '.': pattern += ')'
-                    dir_re = re.compile(pattern)
+                    # Fails on 100 groups
+                    try:
+                        dir_re = re.compile(pattern)
+                    except AssertionError:
+                        raise ValueError('Need to use something other than re')
                     headers = list()
                     for h in dir_headers:
                         headers.append(
@@ -73,7 +77,8 @@ def parse_trapeze_stop_trips(text):
             elif line.startswith('Direction:'):
                 name, raw_val = line.split(':',1)
                 val = raw_val.strip()
-                assert(val in ('To Downtown', 'From Downtown'))
+                # Also Northbound, etc.
+                #assert(val in ('To Downtown', 'From Downtown'))
                 d['dir'].append(dict(headers=list()))
                 d['dir'][-1]['name'] = val
                 in_dir = True
@@ -92,7 +97,7 @@ def stop_id_lookup(stop_abbr, line_id, line_dir):
 
 def combine_tables(stop_data, routes_data):
     
-    routes = dict([(b,a) for a,b,_,_ in routes_data])
+    routes = dict([(b,a) for a,b,_,_,_ in routes_data])
     route_id = routes[stop_data['meta']['Line']]
     stop_data['meta']['route_id'] = route_id
     service_id = stop_data['meta']['Service']
@@ -150,6 +155,9 @@ def stop_times_from_data(stop_data):
         for t_num, t in enumerate(d['trips']):
             trip_id = t[0]
             for s_num, raw_time in enumerate(t[1:]):
+                # Some are empty
+                if not raw_time: continue
+                
                 # Trapeze uses '+' for approximate times (we think)
                 raw_time = raw_time.replace('+','')
                 hour, minute = [int(x) for x in raw_time.split(':')]
@@ -225,17 +233,33 @@ Pattern  INT  VAL    DAS1                                                       
 '''
 
 #route_id,route_short_name,route_long_name,route_type
-routes_data = [
-    ('2398','100','Admiral','3')
-]
+#routes_data = [
+#    ('2398','100','Admiral','3')
+#]
 
 if __name__ == '__main__':
-    data = parse_trapeze_text(st_100_1)
-    data2 = combine_tables(data, routes_data)
+    import glob
+    
+    destination_folder = "./"
+    routes_data = []
+    with open('%s%s.txt' % (destination_folder,
+                            'routes'), 'r') as f:
+        reader = csv.reader(f)
+        reader.next()
+        routes_data.extend(reader)
+    
+    text_dir = "data/Stoptrips/*.txt"
     trips = [trip_columns()]
-    trips.extend(trips_from_data(data))
     stops = [stop_columns()]
-    stops.extend(stop_times_from_data(data))
+    for filename in glob.glob(text_dir):
+        d = open(filename, 'rU').read()
+        try:
+            data = parse_trapeze_text(d)
+        except(ValueError):
+            continue
+        data2 = combine_tables(data, routes_data)
+        trips.extend(trips_from_data(data))
+        stops.extend(stop_times_from_data(data))
     
     destination_folder = "./"
     output_name = 'trips'
