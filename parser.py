@@ -9,19 +9,44 @@ import sys
 
 def latlon_transformer(value):
     '''Transforms latitude and longitude values to valid degree decimals'''
-    return float(value) / 1000000
+    try:
+        return float(value) / 1000000
+    except:
+        return value
 
 
 def convert_color(value):
     '''Convert integer value into a hex color value'''
-    return '%06x' % value
+    try:
+        return '%06x' % value
+    except:
+        return value
+
+
+def str_exists_validator(value):
+    '''validates thats that a string is not empty'''
+    try:
+        return isinstance(value, str) and len(value) > 0
+    except:
+        return False
+
+
+def latlon_validator(value):
+    from numbers import Number
+    try:
+        return isinstance(value, Number) and value != 0
+    except:
+        return False
 
 
 MAPPING = {'stops': {'file': 'STOPS/stops.dbf',
                      'fields': (('StopId', 'stop_id'),
-                                ('StopName', 'stop_name'),
-                                ('lat', 'stop_lat', latlon_transformer),
-                                ('lon', 'stop_lon', latlon_transformer),
+                                ('StopName', 'stop_name', None,
+                                 str_exists_validator),
+                                ('lat', 'stop_lat', latlon_transformer,
+                                 latlon_validator),
+                                ('lon', 'stop_lon', latlon_transformer,
+                                 latlon_validator),
                                 ('SiteName', 'stop_desc'),
                                 ('StopAbbr', 'stop_code'))},
            'routes': {'file': 'lines/line.dbf',
@@ -50,13 +75,18 @@ def parse(dbf_folder='./', destination_folder='./', mapping=MAPPING):
         rows.append(header)
         for record in db_f:
             row = []
+            invalid_fields = False
             for field in feed['fields']:
                 if field[0]:
                     field_value = record[field[0]]
                 if len(field) >= 3 and callable(field[2]):
                     field_value = field[2](field_value)
+                if len(field) >= 4 and callable(field[3]):
+                    if not field[3](field_value):
+                        invalid_fields = True
                 row.append(field_value)
-            rows.append(row)
+            if not invalid_fields:
+                rows.append(row)
         if rows:
             with open('%s%s.txt' % (destination_folder,
                                     output_name), 'w') as f:
