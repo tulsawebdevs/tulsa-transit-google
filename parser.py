@@ -84,7 +84,11 @@ def parse(dbf_folder='./', destination_folder='./', mapping=MAPPING):
                 if len(field) >= 4 and callable(field[3]):
                     if not field[3](field_value):
                         invalid_fields = True
-                row.append(field_value)
+                if isinstance(field_value, str):
+                    row.append(unicode(field_value, encoding='latin-1')
+                        .encode('utf-8'))
+                else:
+                    row.append(field_value)
             if not invalid_fields:
                 rows.append(row)
         if rows:
