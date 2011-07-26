@@ -2,7 +2,6 @@
 '''Parse a trapeze text file'''
 
 import csv
-import re
 import sqlite3
 
 import line_stops_generator
@@ -22,6 +21,7 @@ def parse_trapeze_stop_trips(text):
     dir_num = 0
     dir_headers = None
     dir_trips = None
+    dir_fields = None
     d = dict(meta=dict(),dir=list())
     for linenum, line in enumerate(text.split('\n')):
         if in_header:
@@ -43,19 +43,20 @@ def parse_trapeze_stop_trips(text):
                     dir_num += 1
             elif dir_trips is None:
                 if line.startswith('~'):
-                    pattern = '^(' + line.replace('~','.').\
-                        replace(' .',' (.').replace('. ','.) ')
-                    
-                    if pattern[-1] == '.': pattern += ')'
-                    # Fails on 100 groups
-                    try:
-                        dir_re = re.compile(pattern)
-                    except AssertionError:
-                        raise ValueError('Need to use something other than re')
+                    dir_fields = list()
+                    start = 0
+                    last_char = '~'
+                    for column, char in enumerate(line):
+                        if char != last_char:
+                            if char == ' ':
+                                dir_fields.append((start, column))
+                            elif char == '~':
+                                start = column
+                            last_char = char
+                    dir_fields.append((start, column))
                     headers = list()
                     for h in dir_headers:
-                        headers.append(
-                            [x.strip() for x in dir_re.match(h).groups()])
+                        headers.append([h[s:e].strip() for s,e in dir_fields])
                     minimized_headers = list()
                     for h in zip(*headers):
                         minimized_headers.append(
@@ -69,7 +70,7 @@ def parse_trapeze_stop_trips(text):
                     dir_headers.append(line)
             else:
                 dir_trips.append(
-                    [x.strip() for x in dir_re.match(line).groups()[3:]])
+                    [line[s:e].strip() for s,e in dir_fields][3:])
             
         else:
             if linenum == 0: assert(line == 'Stop Trips')
