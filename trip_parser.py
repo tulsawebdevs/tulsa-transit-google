@@ -165,7 +165,7 @@ def stop_columns():
         'stop_sequence',    # order of the stops for a trip - starts with 1
     ]
 
-def stop_times_from_data(stop_data):
+def stop_times_from_data(stop_data, include_approx=False):
 
     route_id = stop_data['meta']['route_id']
     service_id = stop_data['meta']['Service']
@@ -178,9 +178,14 @@ def stop_times_from_data(stop_data):
                 if not raw_time: continue
                 
                 # Trapeze uses '+' for approximate times (we think)
-                raw_time = raw_time.replace('+','')
-                hour, minute = [int(x) for x in raw_time.split(':')]
-                gtime = "%02d:%02d:00" % (hour, minute)
+                if '+' in raw_time and include_approx:
+                    raw_time = raw_time.replace('+','')
+                if '+' in raw_time:
+                    # Omit approximate time
+                    gtime = ""
+                else:
+                    hour, minute = [int(x) for x in raw_time.split(':')]
+                    gtime = "%02d:%02d:00" % (hour, minute)
                 
                 stop_id = d['stop_ids'][s_num+1]
                 stop_times.append((trip_id, gtime, gtime, stop_id, s_num + 1))
