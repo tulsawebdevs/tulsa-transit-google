@@ -6,6 +6,10 @@ import sqlite3
 
 import line_stops_generator
 
+def is_useful(full_path):
+    '''TODO: actual function'''
+    return False
+
 def parse_trapeze_text(text):
     '''Parse a trapeze file'''
     if text.startswith('Stop Trips'):
@@ -111,7 +115,6 @@ def stop_id_lookup(stop_abbr, line_id, line_dir):
     if stop_id is None:
         print "No match for line %s-%s, stop_abbr %s" % (line_id, line_dir, stop_abbr)
     return stop_id
-
 
 def combine_tables(stop_data, routes_data):
     
