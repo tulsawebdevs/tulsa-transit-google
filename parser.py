@@ -92,7 +92,7 @@ def main(argv=None):
         argv = sys.argv
     base_path = os.path.abspath(os.path.dirname(__file__))
     input_folder = os.path.join(base_path, 'input')
-    destination = os.path.join(base_path, 'feed')
+    destination = os.path.join(base_path, 'output', 'feed')
     database_path = ':memory:'
     try:
         try:
