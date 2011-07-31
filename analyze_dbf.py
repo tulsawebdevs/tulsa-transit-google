@@ -5,8 +5,7 @@
 ./analyze_dbf <path_to_dbf>
 '''
 
-
-
+import itertools
 import os
 import sys
 
@@ -17,16 +16,29 @@ def analyze_dbf(dbf_file):
     db_f = dbfpy.dbf.Dbf(dbf_file, readOnly=True)
     
     # Gather columns
-    columns = [x.name for x in db_f.fieldDefs]
+    # Some columns appear multiple times, so munge the names
+    raw_columns = [x.name for x in db_f.fieldDefs]
+    columns_tmp = []
+    columns = []
+    for cnum, c in enumerate(raw_columns):
+        assert('[' not in c)
+        if raw_columns.count(c) == 1:
+            columns.append("%03d:%s" % (cnum, c))
+        else:
+            num = columns_tmp.count(c) + 1
+            columns.append("%03d:%s[%s]" % (cnum, c, num))
+        columns_tmp.append(c)
     total_rows = db_f.recordCount
     
     # Gather values and counts
     fields = dict()
     for rownum, record in enumerate(db_f):
         if rownum == 0: continue
-        for column, value in record.asDict().items():
-            if column not in fields: fields[column] = dict()
-            if value not in fields[column]: fields[column][value] = 0
+        for column, value in itertools.izip(columns, record.asList()):
+            if column not in fields:
+                fields[column] = dict()
+            if value not in fields[column]:
+                fields[column][value] = 0
             fields[column][value] += 1
     
     # Invert and analyze
