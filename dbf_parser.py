@@ -18,9 +18,12 @@ def latlon_transformer(value):
 
 
 def convert_color(value):
-    '''Convert integer value into a hex color value'''
+    '''Convert integer value into a hex color value
+    
+    Because SQLite strips leading 0's from numbers, we store strangely.
+    '''
     try:
-        return '%06x' % value
+        return 'sqlite_val(%06x)' % value
     except:
         return value
 
@@ -39,6 +42,13 @@ def latlon_validator(value):
         return isinstance(value, Number) and value != 0
     except:
         return False
+
+def line_no_transformer(value):
+    return str(value)[:-1]
+
+
+def line_dir_transformer(value):
+    return str(value)[-1]
 
 
 '''
@@ -68,7 +78,16 @@ DBF_MAPPING = {
             ('', 'route_type', lambda x: 3),
             ('LineColor', 'route_color', convert_color),
         )},
+    'stopsbyline': {
+        'table': 'line_stops',
+        'fields': (
+            ('StopId', 'stop_id'),
+            ('StopAbbr', 'stop_abbr'),
+            ('LineDirId', 'line_no', line_no_transformer),
+            ('LineDirId', 'line_dir', line_dir_transformer),
+        )},
 }
+
 
 def is_useful(full_path):
     '''Check if a file is an MTTA dbf file'''

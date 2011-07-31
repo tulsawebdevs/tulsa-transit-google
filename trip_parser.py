@@ -7,8 +7,19 @@ import sqlite3
 import line_stops_generator
 
 def is_useful(full_path):
-    '''TODO: actual function'''
-    return False
+    '''Return True if a file is a Stop Trips file'''
+    if not full_path.lower().endswith('.txt'): return False
+    key_string = 'Stop Trips'
+    first_bits = open(full_path, 'r').read(len(key_string))
+    return first_bits == key_string
+
+
+def read(full_path, database):
+    '''Read a Stop Trips file'''
+    text = open(full_path, 'rU').read()
+    data = parse_trapeze_stop_trips(text)
+    store_stop_trips(data, database)
+
 
 def parse_trapeze_text(text):
     '''Parse a trapeze file'''
@@ -16,6 +27,7 @@ def parse_trapeze_text(text):
         return parse_trapeze_stop_trips(text)
     else:
         raise ValueError('Unknown Trapeze text dump')
+
 
 def parse_trapeze_stop_trips(text):
     '''Parse a trapeze Stop Trips file'''
@@ -99,13 +111,95 @@ def parse_trapeze_stop_trips(text):
     return d
 
 
-def stop_id_lookup(stop_abbr, line_id, line_dir):
+def store_stop_trips(stop_data, database, verbose=False):
+    '''Store stop trips data to the database'''
+    
+    cursor = database.cursor()
+    
+    # Gather line_no to route_ids
+    # Not ideal, but simplifies things down the line
+    route_sql = 'SELECT route_short_name, route_id FROM routes;'
+    res = cursor.execute(route_sql).fetchall()
+    assert(len(res) > 0)
+    route_ids = dict([(str(k), v) for k,v in res])
+
+    # Read all stop_ids
+    # Again, not ideal, but easier to do this on first insert
+    line_stops_sql = ('SELECT stop_abbr, line_no, line_dir, stop_id' + 
+        ' FROM line_stops;')
+    stop_ids = dict()
+    for stop_abbr, line_no, line_dir, stop_id in cursor.execute(
+            line_stops_sql):
+        key = (stop_abbr, line_no, line_dir)
+        if not key in stop_ids:
+            stop_ids[key] = []
+        stop_ids[key].append(stop_id)
+    
+    line_id = stop_data['meta']['Line']
+    route_id = route_ids[line_id]
+    service_id = stop_data['meta']['Service']
+    stop_times = list()
+    for dir_num, d in enumerate(stop_data['dir']):
+        for t_num, t in enumerate(d['trips']):
+            trip_id = "%s_%s_%d_%02d" % (route_id, service_id, dir_num, t_num)
+            for s_num, raw_time in enumerate(t):
+                # Some are empty
+                if not raw_time: continue
+                
+                # Trapeze uses '+' for approximate times (we think)
+                if '+' in raw_time:
+                    # Omit approximate time
+                    gtime = ""
+                else:
+                    hour, minute = [int(x) for x in raw_time.split(':')]
+                    gtime = "%02d:%02d:00" % (hour, minute)
+                
+                stop_abbrs = d['headers'][s_num]
+                raw_stop_abbr = ';'.join(stop_abbrs)
+                stop_id = pick_stop_id(stop_ids, stop_abbrs, route_id,
+                    dir_num)
+                stop_times.append((trip_id, gtime, gtime, raw_stop_abbr,
+                    stop_id, s_num+1))
+
+    trips = list()
+    for dir_num, d in enumerate(stop_data['dir']):
+        headsign = d['name']
+        for t_num, t in enumerate(d['trips']):
+            trip_id = "%s_%s_%d_%02d" % (route_id, service_id, dir_num, t_num)
+            trips.append((route_id, service_id, trip_id, headsign, dir_num))
+
+    stop_times_sql = ('INSERT INTO stop_times (trip_id, arrival_time,' +
+        'departure_time, x_stop_abbr, stop_id, stop_sequence) ' +
+        'VALUES (?, ?, ?, ?, ?, ?);')
+    cursor.executemany(stop_times_sql, stop_times)
+    trips_sql = ('INSERT INTO trips (route_id, service_id, trip_id, ' + 
+        'trip_headsign, direction_id) VALUES (?, ?, ?, ?, ?)')
+    cursor.executemany(trips_sql, trips)
+    cursor.close()
+    database.commit()
+
+
+def pick_stop_id(stop_ids, stop_abbrs, route_id, dir_num):
+    '''Find a stop ID, or die trying'''
+    stop_id = None
+    candidates = set()
+    for stop_abbr in stop_abbrs:
+        key = (str(stop_abbr), str(route_id), str(dir_num))
+        candidates.update(stop_ids.get(key, []))
+    if len(candidates) == 0:
+        raise Exception('No stop ID candidates for stop_abbrs ' +
+            ','.join(stop_abbrs))
+    if len(candidates) > 1:
+        print 'For stop_abbr %s, multiple stop candidates %s' % (           
+            ','.join(stop_abbrs), ','.join([str(c) for c in candidates]))
+    return candidates.pop()
+
+
+def stop_id_lookup(database, stop_abbr, line_id, line_dir):
     '''Find a stop ID, or return None'''
     
-    global line_stops_db
-    
     stop_id = None
-    c = line_stops_db.cursor()
+    c = database.cursor()
     c.execute('SELECT stop_id FROM line_stops WHERE stop_abbr=? AND line_no=? AND line_dir=?', (stop_abbr, line_id, line_dir))
     for row in c:
         if (stop_id is not None):
@@ -116,7 +210,7 @@ def stop_id_lookup(stop_abbr, line_id, line_dir):
         print "No match for line %s-%s, stop_abbr %s" % (line_id, line_dir, stop_abbr)
     return stop_id
 
-def combine_tables(stop_data, routes_data):
+def combine_tables(database, stop_data, routes_data):
     
     routes = dict([(b,a) for a,b,_,_,_ in routes_data])
     route_id = routes[stop_data['meta']['Line']]
@@ -132,7 +226,8 @@ def combine_tables(stop_data, routes_data):
         for stop_abbrs in d['headers'][1:]:
             stop_id = None
             for stop_abbr in stop_abbrs:
-                stop_id = stop_id_lookup(stop_abbr, route_id, dir_num)
+                stop_id = stop_id_lookup(database, stop_abbr, route_id,
+                    dir_num)
                 if stop_id: break
             assert(stop_id is not None)
             d['stop_ids'].append(stop_id)
@@ -221,7 +316,7 @@ if __name__ == '__main__':
             data = parse_trapeze_text(d)
         except(ValueError):
             continue
-        data2 = combine_tables(data, routes_data)
+        data2 = combine_tables(line_stops_db, data, routes_data)
         trips.extend(trips_from_data(data))
         stops.extend(stop_times_from_data(data))
     
