@@ -134,6 +134,7 @@ def store_stop_trips(stop_data, database, verbose=False):
     route_id = route_ids[line_id]
     service_id = stop_data['meta']['Service']
     stop_times = list()
+    complaints = set()
     for dir_num, d in enumerate(stop_data['dir']):
         for t_num, t in enumerate(d['trips']):
             trip_id = "%s_%s_%d_%02d" % (route_id, service_id, dir_num, t_num)
@@ -151,10 +152,14 @@ def store_stop_trips(stop_data, database, verbose=False):
                 
                 stop_abbrs = d['headers'][s_num]
                 raw_stop_abbr = ';'.join(stop_abbrs)
-                stop_id = pick_stop_id(stop_ids, stop_abbrs, route_id,
-                    dir_num)
+                stop_id, complaint = pick_stop_id(stop_ids, stop_abbrs, 
+                    route_id, dir_num)
+                if complaint:
+                    complaints.add(complaint)
                 stop_times.append((trip_id, gtime, gtime, raw_stop_abbr,
                     stop_id, s_num+1))
+    if complaints:
+        print "\n".join(sorted(list(complaints)))
 
     trips = list()
     for dir_num, d in enumerate(stop_data['dir']):
@@ -178,6 +183,7 @@ def pick_stop_id(stop_ids, stop_abbrs, route_id, dir_num):
     '''Find a stop ID, or die trying'''
     stop_id = None
     candidates = set()
+    complaint = None
     for stop_abbr in stop_abbrs:
         key = (str(stop_abbr), str(route_id), str(dir_num))
         candidates.update(stop_ids.get(key, []))
@@ -185,6 +191,6 @@ def pick_stop_id(stop_ids, stop_abbrs, route_id, dir_num):
         raise Exception('No stop ID candidates for stop_abbrs ' +
             ','.join(stop_abbrs))
     if len(candidates) > 1:
-        print 'For stop_abbr %s, multiple stop candidates %s' % (           
+        complaint = 'For stop_abbr %s, multiple stop candidates %s' % (           
             ','.join(stop_abbrs), ','.join([str(c) for c in candidates]))
-    return candidates.pop()
+    return candidates.pop(), complaint
