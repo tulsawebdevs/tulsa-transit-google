@@ -23,7 +23,7 @@ def convert_color(value):
     Because SQLite strips leading 0's from numbers, we store strangely.
     '''
     try:
-        return 'sqlite_val(%06x)' % value
+        return '%06x' % value
     except:
         return value
 

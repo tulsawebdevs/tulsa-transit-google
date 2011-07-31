@@ -24,18 +24,18 @@ import trip_parser
 DATABASE_SCHEMA = {
     'stops': (
         ('stop_id', 'int', True),
-        ('stop_name', 'str', True),
+        ('stop_name', 'text', True),
         ('stop_lat', 'int', True),
         ('stop_lon', 'int', True),
-        ('stop_desc', 'str', True),
-        ('stop_code', 'str', True),
+        ('stop_desc', 'text', True),
+        ('stop_code', 'text', True),
     ),
     'routes': (
         ('route_id', 'int', True),
-        ('route_short_name', 'str', True),
-        ('route_long_name', 'str', True),
+        ('route_short_name', 'text', True),
+        ('route_long_name', 'text', True),
         ('route_type', 'int', True),
-        ('route_color', 'str', True),
+        ('route_color', 'text', True),
     ),
     'line_stops': (
         ('stop_id', 'int', False),
@@ -46,17 +46,17 @@ DATABASE_SCHEMA = {
     'trips' : (
         ('route_id', 'int', True),
         ('service_id', 'int', True),
-        ('trip_id', 'str', True),
+        ('trip_id', 'text', True),
         ('trip_headsign', 'int', True),
         ('direction_id', 'int', True),
     ),
     'stop_times' : (
-        ('trip_id', 'str', True),
-        ('arrival_time', 'str', True),
-        ('departure_time', 'str', True),
+        ('trip_id', 'text', True),
+        ('arrival_time', 'text', True),
+        ('departure_time', 'text', True),
         ('stop_id', 'int', True),
         ('stop_sequence', 'int', True),
-        ('x_stop_abbr','str', False),
+        ('x_stop_abbr','text', False),
     ),
 }
 
@@ -97,10 +97,7 @@ def write_gtf_text(database, destination_folder, schema):
 
         def to_csv_field(val):
             if isinstance(val, unicode):
-                out = val.encode('utf-8')
-                if out.startswith('sqlite_val('):
-                    out = out[11:-1]
-                return out
+                return val.encode('utf-8')
             else:
                 return val
 
