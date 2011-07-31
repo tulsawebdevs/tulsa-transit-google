@@ -11,9 +11,12 @@ Convert a folder of DBF files to Google Transit Feed files.  Options:
 
 import csv
 import getopt
+import glob
 import os
+import shutil
 import sqlite3
 import sys
+import zipfile
 
 import dbf_parser
 import trip_parser
@@ -108,6 +111,7 @@ def write_gtf_text(database, destination_folder, schema):
                 csv_row = [to_csv_field(c) for c in row]
                 writer.writerow(csv_row)
     cur.close()
+    return out_files
 
 class Usage(Exception):
     def __init__(self, msg):
@@ -172,7 +176,22 @@ def main(argv=None):
     # Write from database to Google Transit Feed files
     out_files = write_gtf_text(database, destination, schema)
     
-    # TODO: Write zip file
+    # Copy files from static folder
+    static_folder = os.path.join(base_path, "static")
+    for f in glob.glob(os.path.join(base_path, "static", "*.txt")):
+        filename = os.path.split(f)[1]
+        dest_path = os.path.join(destination, filename)
+        shutil.copy(f, dest_path)
+        out_files.append(dest_path)
+    
+    # Write feed.zip
+    zip_path = os.path.join(destination, 'feed.zip')
+    feed_zip = zipfile.ZipFile(zip_path, 'w')
+    for f in out_files:
+        filename = os.path.split(f)[1]
+        feed_zip.write(f, filename)
+    feed_zip.close()
+    
     return 0
 
 if __name__ == "__main__":
