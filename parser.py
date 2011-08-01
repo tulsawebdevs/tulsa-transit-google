@@ -4,9 +4,11 @@
 Convert a folder of DBF files to Google Transit Feed files.  Options:
 
  -h, --help     - This help
+ -v, --verbose  - Print progress messages
  -d, --database - An optional persistant SQLite3 database
  -i, --in       - The input directory (default ./input)
  -o, --out      - The output directory (default ./output)
+ --validate     - Run Google's validator, exit non-zero if invalid
 '''
 
 import csv
@@ -126,6 +128,7 @@ def main(argv=None):
     if argv is None:
         argv = sys.argv
     verbose = False
+    validate = False
     base_path = os.path.abspath(os.path.dirname(__file__))
     input_folder = os.path.join(base_path, 'input')
     destination = os.path.join(base_path, 'output', 'feed')
@@ -133,7 +136,7 @@ def main(argv=None):
     try:
         try:
             opts, args = getopt.getopt(argv[1:], "hi:d:o:v",
-                ["help", "in=", "database=", "out=", "verbose"])
+                ["help", "in=", "database=", "out=", "verbose", "validate"])
         except getopt.error, msg:
             raise Usage(msg)
 
@@ -149,6 +152,8 @@ def main(argv=None):
                 database_path = value
             if option in ("-o", "--out"):
                 destination = value
+            if option in ("--validate", ):
+                validate = True
 
     except Usage, err:
         print >> sys.stderr, sys.argv[0].split("/")[-1] + ": " + str(err.msg)
@@ -202,7 +207,19 @@ def main(argv=None):
         feed_zip.write(f, filename)
     feed_zip.close()
     
-    return 0
+    # Optionally validate
+    if validate:
+        if verbose: 
+            print "Validating"
+        sys.path.append('./transitfeed-1.2.7')
+        import feedvalidator
+        
+        output = os.path.join(destination, 'validation-results.html')
+        old_argv = sys.argv
+        sys.argv = [sys.argv[0], zip_path, '--output=%s' % output]
+        return feedvalidator.main()
+    else:
+        return 0
 
 if __name__ == "__main__":
     sys.exit(main())
