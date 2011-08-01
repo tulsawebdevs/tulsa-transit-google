@@ -42,6 +42,7 @@ DATABASE_SCHEMA = {
         ('stop_abbr', 'text', False),
         ('line_no', 'text', False),
         ('line_dir', 'text', False),
+        ('sequence', 'text', False),
     ),
     'trips' : (
         ('route_id', 'int', True),

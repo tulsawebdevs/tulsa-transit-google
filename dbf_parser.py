@@ -85,6 +85,7 @@ DBF_MAPPING = {
             ('StopAbbr', 'stop_abbr'),
             ('LineDirId', 'line_no', line_no_transformer),
             ('LineDirId', 'line_dir', line_dir_transformer),
+            ('Sequence', 'sequence'),
         )},
 }
 
