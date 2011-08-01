@@ -106,7 +106,7 @@ def get_key_name(full_path):
     else:
         return None
 
-def read(dbf_path, database):
+def read(dbf_path, database, verbose=False):
     '''Read an MTTA dbf file into the database'''
     key_name = get_key_name(dbf_path)
     feed = DBF_MAPPING[key_name]

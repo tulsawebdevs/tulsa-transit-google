@@ -159,7 +159,7 @@ def main(argv=None):
             if dbf_parser.is_useful(full_path):
                 if verbose:
                     print "Parsing DBF file '%s'" % full_path
-                dbf_parser.read(full_path, database)
+                dbf_parser.read(full_path, database, verbose)
     
     # Read trip files
     for path, dirs, files in os.walk(input_folder):
@@ -168,7 +168,7 @@ def main(argv=None):
             if trip_parser.is_useful(full_path):
                 if verbose:
                     print "Parsing trip file '%s'" % full_path
-                trip_parser.read(full_path, database)
+                trip_parser.read(full_path, database, verbose)
         
     # Write from database to Google Transit Feed files
     out_files = write_gtf_text(database, destination, schema)

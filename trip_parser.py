@@ -9,11 +9,11 @@ def is_useful(full_path):
     return first_bits == key_string
 
 
-def read(full_path, database):
+def read(full_path, database, verbose=False):
     '''Read a Stop Trips file'''
     text = open(full_path, 'rU').read()
     data = parse_trapeze_stop_trips(text)
-    store_stop_trips(data, database)
+    store_stop_trips(data, database, verbose)
 
 
 def parse_trapeze_text(text):
@@ -158,7 +158,7 @@ def store_stop_trips(stop_data, database, verbose=False):
                     complaints.add(complaint)
                 stop_times.append((trip_id, gtime, gtime, raw_stop_abbr,
                     stop_id, s_num+1))
-    if complaints:
+    if complaints and verbose:
         print "\n".join(sorted(list(complaints)))
 
     trips = list()
