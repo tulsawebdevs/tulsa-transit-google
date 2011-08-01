@@ -49,7 +49,7 @@ DATABASE_SCHEMA = {
         ('sequence', 'text', False),
         ('active', 'int', False),
     ),
-    'trips' : (
+    'trips': (
         ('route_id', 'int', True),
         ('service_id', 'int', True),
         ('trip_id', 'text', True),
@@ -57,16 +57,17 @@ DATABASE_SCHEMA = {
         ('direction_id', 'int', True),
         ('active', 'int', False),
     ),
-    'stop_times' : (
+    'stop_times': (
         ('trip_id', 'text', True),
         ('arrival_time', 'text', True),
         ('departure_time', 'text', True),
         ('stop_id', 'int', True),
         ('stop_sequence', 'int', True),
-        ('x_stop_abbr','text', False),
+        ('x_stop_abbr', 'text', False),
         ('active', 'int', False),
     ),
 }
+
 
 def create_db(database, schema, drop_first=True):
     '''Create the database schema'''
@@ -77,17 +78,17 @@ def create_db(database, schema, drop_first=True):
 
 def create_db_sql(schema, drop_first):
     '''Return SQL for creating the database schema'''
-    
+
     sql = []
     if drop_first:
         for table_name in schema.keys():
             sql.append('DROP TABLE IF EXISTS %s;' % table_name)
-    
+
     for table_name, column_data in schema.items():
-        sql.append('CREATE TABLE %s' % table_name + ' (' + 
+        sql.append('CREATE TABLE %s' % table_name + ' (' +
             ', '.join(['%s %s' % (cname, ctype) for
                 cname, ctype, _ in column_data]) + ');')
-    
+
     return '\n'.join(sql)
 
 
@@ -120,9 +121,11 @@ def write_gtf_text(database, destination_folder, schema):
     cur.close()
     return out_files
 
+
 class Usage(Exception):
     def __init__(self, msg):
         self.msg = msg
+
 
 def main(argv=None):
     if argv is None:
@@ -164,7 +167,7 @@ def main(argv=None):
     schema = DATABASE_SCHEMA
     database = sqlite3.connect(database_path)
     create_db(database, schema, True)
-    
+
     # Read DBF files
     for path, dirs, files in os.walk(input_folder):
         for f in files:
@@ -173,7 +176,7 @@ def main(argv=None):
                 if verbose:
                     print "Parsing DBF file '%s'" % full_path
                 dbf_parser.read(full_path, database, verbose)
-    
+
     # Read trip files
     for path, dirs, files in os.walk(input_folder):
         for f in files:
@@ -182,15 +185,15 @@ def main(argv=None):
                 if verbose:
                     print "Parsing trip file '%s'" % full_path
                 trip_parser.read(full_path, database, verbose)
-    
+
     # Activate stops if they are in a schedule
     database.execute('UPDATE stops SET active=1 WHERE stops.stop_id IN' +
         ' (SELECT DISTINCT stop_times.stop_id FROM stop_times);')
     database.commit()
-    
+
     # Write from database to Google Transit Feed files
     out_files = write_gtf_text(database, destination, schema)
-    
+
     # Copy files from static folder
     static_folder = os.path.join(base_path, "static")
     for f in glob.glob(os.path.join(base_path, "static", "*.txt")):
@@ -198,7 +201,7 @@ def main(argv=None):
         dest_path = os.path.join(destination, filename)
         shutil.copy(f, dest_path)
         out_files.append(dest_path)
-    
+
     # Write feed.zip
     zip_path = os.path.join(destination, 'feed.zip')
     feed_zip = zipfile.ZipFile(zip_path, 'w')
@@ -206,14 +209,14 @@ def main(argv=None):
         filename = os.path.split(f)[1]
         feed_zip.write(f, filename)
     feed_zip.close()
-    
+
     # Optionally validate
     if validate:
-        if verbose: 
+        if verbose:
             print "Validating"
         sys.path.append('./transitfeed-1.2.7')
         import feedvalidator
-        
+
         output = os.path.join(destination, 'validation-results.html')
         old_argv = sys.argv
         sys.argv = [sys.argv[0], zip_path, '--output=%s' % output]
