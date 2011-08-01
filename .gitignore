@@ -1,4 +1,5 @@
 *.pyc
+*.swp
 
 # Created by virtualenv
 /bin
