@@ -9,6 +9,7 @@ import sys
 
 import dbfpy.dbf
 
+
 def latlon_transformer(value):
     '''Transforms latitude and longitude values to valid degree decimals'''
     try:
@@ -19,7 +20,7 @@ def latlon_transformer(value):
 
 def convert_color(value):
     '''Convert integer value into a hex color value
-    
+
     Because SQLite strips leading 0's from numbers, we store strangely.
     '''
     try:
@@ -43,12 +44,24 @@ def latlon_validator(value):
     except:
         return False
 
+
 def line_no_transformer(value):
     return str(value)[:-1]
 
 
 def line_dir_transformer(value):
     return str(value)[-1]
+
+
+def hold_short_name(value):
+    global __tmp_short_name
+    __tmp_short_name = value
+    return value
+
+
+def strip_short_name(value):
+    global __tmp_short_name
+    return value.replace(__tmp_short_name, '')
 
 
 '''
@@ -74,8 +87,8 @@ DBF_MAPPING = {
         'table': 'routes',
         'fields': (
             ('LineID', 'route_id'),
-            ('LineAbbr', 'route_short_name'),
-            ('LineName', 'route_long_name'),
+            ('LineAbbr', 'route_short_name', hold_short_name),
+            ('LineName', 'route_long_name', strip_short_name),
             ('', 'route_type', lambda x: 3),
             ('LineColor', 'route_color', convert_color),
             ('', 'active', lambda x: 1),
@@ -91,23 +104,27 @@ DBF_MAPPING = {
         )},
 }
 
+__tmp_short_name = ''
+
 
 def is_useful(full_path):
     '''Check if a file is an MTTA dbf file'''
     return get_key_name(full_path) is not None
+
 
 def get_key_name(full_path):
     mapping = DBF_MAPPING
     name = os.path.split(full_path)[-1].lower()
     if not '.dbf' in name:
         return None
-    name = name.replace('.dbf','')
+    name = name.replace('.dbf', '')
     if name not in mapping:
         name += 's'
     if name in mapping:
         return name
     else:
         return None
+
 
 def read(dbf_path, database, verbose=False):
     '''Read an MTTA dbf file into the database'''
@@ -131,7 +148,6 @@ def read(dbf_path, database, verbose=False):
                 if not field[3](field_value):
                     invalid_fields = True
             if isinstance(field_value, str):
-                
                 row.append(unicode(field_value, encoding='latin-1'))
             else:
                 row.append(field_value)
@@ -143,7 +159,6 @@ def read(dbf_path, database, verbose=False):
         sql += ') VALUES (' + ', '.join(['?' for _ in header]) + ');'
         # Faster but harder to debug
         # database.executemany(sql, rows)
-        
+
         for row in rows:
             database.execute(sql, row)
-
