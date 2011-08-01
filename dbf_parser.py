@@ -68,6 +68,7 @@ DBF_MAPPING = {
             ('lon', 'stop_lon', latlon_transformer, latlon_validator),
             ('SiteName', 'stop_desc'),
             ('StopAbbr', 'stop_code'),
+            ('', 'active', lambda x: 0),
         )},
     'lines': {
         'table': 'routes',
@@ -77,6 +78,7 @@ DBF_MAPPING = {
             ('LineName', 'route_long_name'),
             ('', 'route_type', lambda x: 3),
             ('LineColor', 'route_color', convert_color),
+            ('', 'active', lambda x: 1),
         )},
     'stopsbyline': {
         'table': 'line_stops',

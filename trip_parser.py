@@ -179,11 +179,11 @@ def store_stop_trips(stop_data, database, verbose=False):
             trips.append((route_id, service_id, trip_id, headsign, dir_num))
 
     stop_times_sql = ('INSERT INTO stop_times (trip_id, arrival_time,' +
-        'departure_time, x_stop_abbr, stop_id, stop_sequence) ' +
-        'VALUES (?, ?, ?, ?, ?, ?);')
+        'departure_time, x_stop_abbr, stop_id, stop_sequence, active) ' +
+        'VALUES (?, ?, ?, ?, ?, ?, 1);')
     cursor.executemany(stop_times_sql, stop_times)
     trips_sql = ('INSERT INTO trips (route_id, service_id, trip_id, ' + 
-        'trip_headsign, direction_id) VALUES (?, ?, ?, ?, ?)')
+        'trip_headsign, direction_id, active) VALUES (?, ?, ?, ?, ?, 1)')
     cursor.executemany(trips_sql, trips)
     cursor.close()
     database.commit()

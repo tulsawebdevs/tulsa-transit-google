@@ -29,6 +29,7 @@ DATABASE_SCHEMA = {
         ('stop_lon', 'int', True),
         ('stop_desc', 'text', True),
         ('stop_code', 'text', True),
+        ('active', 'int', False),
     ),
     'routes': (
         ('route_id', 'int', True),
@@ -36,6 +37,7 @@ DATABASE_SCHEMA = {
         ('route_long_name', 'text', True),
         ('route_type', 'int', True),
         ('route_color', 'text', True),
+        ('active', 'int', False),
     ),
     'line_stops': (
         ('stop_id', 'int', False),
@@ -43,6 +45,7 @@ DATABASE_SCHEMA = {
         ('line_no', 'text', False),
         ('line_dir', 'text', False),
         ('sequence', 'text', False),
+        ('active', 'int', False),
     ),
     'trips' : (
         ('route_id', 'int', True),
@@ -50,6 +53,7 @@ DATABASE_SCHEMA = {
         ('trip_id', 'text', True),
         ('trip_headsign', 'int', True),
         ('direction_id', 'int', True),
+        ('active', 'int', False),
     ),
     'stop_times' : (
         ('trip_id', 'text', True),
@@ -58,6 +62,7 @@ DATABASE_SCHEMA = {
         ('stop_id', 'int', True),
         ('stop_sequence', 'int', True),
         ('x_stop_abbr','text', False),
+        ('active', 'int', False),
     ),
 }
 
@@ -94,7 +99,8 @@ def write_gtf_text(database, destination_folder, schema):
         if len(columns) == 0:
             continue
         out_files.append(out_name)
-        sql = 'SELECT ' + ', '.join(columns) + ' FROM ' + table_name + ';'
+        sql = ('SELECT active, ' + ', '.join(columns) +
+            ' FROM ' + table_name + ';')
 
         def to_csv_field(val):
             if isinstance(val, unicode):
@@ -106,8 +112,9 @@ def write_gtf_text(database, destination_folder, schema):
             writer = csv.writer(f)
             writer.writerow(columns)
             for row in cur.execute(sql):
-                csv_row = [to_csv_field(c) for c in row]
-                writer.writerow(csv_row)
+                if row[0] == 1:
+                    csv_row = [to_csv_field(c) for c in row[1:]]
+                    writer.writerow(csv_row)
     cur.close()
     return out_files
 
@@ -170,7 +177,12 @@ def main(argv=None):
                 if verbose:
                     print "Parsing trip file '%s'" % full_path
                 trip_parser.read(full_path, database, verbose)
-        
+    
+    # Activate stops if they are in a schedule
+    database.execute('UPDATE stops SET active=1 WHERE stops.stop_id IN' +
+        ' (SELECT DISTINCT stop_times.stop_id FROM stop_times);')
+    database.commit()
+    
     # Write from database to Google Transit Feed files
     out_files = write_gtf_text(database, destination, schema)
     
