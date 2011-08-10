@@ -57,6 +57,12 @@ def analyze_dbf(dbf_file):
         print "%s - %s"%(c, vals)
     
     print "\nUseless columns:", " ".join(useless_columns)
+
+    # Print summary
+    total = len(columns)
+    useless = total - len(useless_columns)
+    useful = total - useless
+    print "%d columns, %d Useful, %d Useless" % (total, useless, useful)
     
 if __name__ == '__main__':
     
