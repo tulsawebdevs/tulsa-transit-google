@@ -29,6 +29,18 @@ def convert_color(value):
         return value
 
 
+def convert_text_color(value):
+    '''Convert integer value into a contrasting hex color value
+    '''
+    back_color = convert_color(value)
+    gets_white_text = ('000080','800080','800000')
+    if back_color in gets_white_text:
+        text_color = 'ffffff'
+    else:
+        text_color = '000000'
+    return text_color
+
+
 def str_exists_validator(value):
     '''validates thats that a string is not empty'''
     try:
@@ -91,6 +103,7 @@ DBF_MAPPING = {
             ('LineName', 'route_long_name', strip_short_name),
             ('', 'route_type', lambda x: 3),
             ('LineColor', 'route_color', convert_color),
+            ('LineColor', 'route_text_color', convert_text_color),
             ('', 'active', lambda x: 1),
         )},
     'stopsbyline': {

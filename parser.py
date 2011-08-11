@@ -39,6 +39,7 @@ DATABASE_SCHEMA = {
         ('route_long_name', 'text', True),
         ('route_type', 'int', True),
         ('route_color', 'text', True),
+        ('route_text_color', 'text', True),
         ('active', 'int', False),
     ),
     'line_stops': (
