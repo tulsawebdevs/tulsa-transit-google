@@ -40,8 +40,6 @@ def convert_text_color(value):
 
     color_value = ((r * 299) + (g * 587) + (b * 114)) / 1000
 
-    print color_value
-
     if color_value > 130:
         text_color = '000000'
     else:
