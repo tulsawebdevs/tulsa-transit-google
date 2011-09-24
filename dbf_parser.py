@@ -33,11 +33,19 @@ def convert_text_color(value):
     '''Convert integer value into a contrasting hex color value
     '''
     back_color = convert_color(value)
-    gets_white_text = ('000080','800080','800000')
-    if back_color in gets_white_text:
-        text_color = 'ffffff'
-    else:
+    # http://www.webmasterworld.com/forum88/9769.htm
+    r = int(back_color[:2], 16)
+    g = int(back_color[2:4], 16)
+    b = int(back_color[4:6], 16)
+
+    color_value = ((r * 299) + (g * 587) + (b * 114)) / 1000
+
+    print color_value
+
+    if color_value > 130:
         text_color = '000000'
+    else:
+        text_color = 'ffffff'
     return text_color
 
 
