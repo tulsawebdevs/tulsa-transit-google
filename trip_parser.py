@@ -137,6 +137,7 @@ def store_trips(stop_data, database, verbose=False):
     service_id = stop_data['meta']['Service']
     stop_times = list()
     complaints = set()
+    empty_trips = list()
     for dir_num, d in enumerate(stop_data['dir']):
         for t_num, t in enumerate(d['trips']):
             trip_id = "%s_%s_%d_%02d" % (route_id, service_id, dir_num, t_num)
@@ -169,10 +170,12 @@ def store_trips(stop_data, database, verbose=False):
                 if gtime is None:
                     jumping = True
                     if last_node:
-                        node_times[last_node][1] = jumping
+                        node_times[last_node][-1][1] = jumping
                 else:
                     jumping = False
-                node_times[node_abbr] = [gtime, jumping]
+                if not node_abbr in node_times:
+                    node_times[node_abbr] = []
+                node_times[node_abbr].append([gtime, jumping])
                 last_node = node_abbr
             
             # Run through all the stops on this trip
@@ -183,19 +186,37 @@ def store_trips(stop_data, database, verbose=False):
             stops = dict()
             for stop_abbr, node_abbr, stop_id, sequence in cursor.execute(sql):
                 stops[int(sequence)] = (stop_abbr, node_abbr, stop_id)
-            jumping = False
+            jumping = True
+            new_jumping = True
             last_time = None
+            non_node_times = []
+            count = 0
             for sequence in sorted(stops.keys()):
                 stop_abbr, node_abbr, stop_id = stops[sequence]
                 if node_abbr:
                     if node_abbr in node_times:
-                        gtime, jumping = node_times[node_abbr]
+                        gtime, jumping = node_times[node_abbr].pop(0)
+                        if jumping is False:
+                            count += len(non_node_times) + 1
+                            stop_times.extend(non_node_times)
+                            non_node_times = []
+                            stop_times.append((trip_id, gtime, gtime,
+                                stop_abbr, stop_id, str(sequence)))
                     else:
                         complaints.add('No time for node "%s" stop "%s" seq %s trip num %s' % ( node_abbr, stop_abbr, sequence, t_num))
-                else:
+                elif not jumping:
                     gtime = ""
-                if not jumping:
-                    stop_times.append((trip_id, gtime, gtime, stop_abbr, stop_id, str(sequence)))
+                    non_node_times.append((trip_id, gtime, gtime, stop_abbr, stop_id, str(sequence)))
+                elif verbose:
+                    print "Skipping %s, stop id %s, seq %d" % (trip_id, stop_id, sequence)
+            if non_node_times and verbose:
+                print "Trip %s - throwing out %d non-nodes at end of trip" % (trip_id, len(non_node_times))
+
+            if count == 1:
+                if verbose:
+                    print "Trip %s has only one stop - discarding"
+                stop_times.pop()
+                empty_trips.append(trip_id)
 
     if complaints and verbose:
         print "\n".join(sorted(list(complaints)))
@@ -205,7 +226,8 @@ def store_trips(stop_data, database, verbose=False):
         headsign = d['name']
         for t_num, t in enumerate(d['trips']):
             trip_id = "%s_%s_%d_%02d" % (route_id, service_id, dir_num, t_num)
-            trips.append((route_id, service_id, trip_id, headsign, dir_num))
+            if trip_id not in empty_trips:
+                trips.append((route_id, service_id, trip_id, headsign, dir_num))
 
     stop_times_sql = ('INSERT INTO stop_times (trip_id, arrival_time,' +
         'departure_time, x_stop_abbr, stop_id, stop_sequence, active) ' +
