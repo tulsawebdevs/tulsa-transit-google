@@ -15,7 +15,7 @@ def read(full_path, database, verbose=False):
     '''Read a Trips file'''
     text = open(full_path, 'rU').read()
     data = parse_trapeze_stop_trips(text)
-    store_stop_trips(data, database, verbose)
+    store_trips(data, database, verbose)
 
 
 def parse_trapeze_text(text):
@@ -120,7 +120,7 @@ def parse_trapeze_stop_trips(text):
     return d
 
 
-def store_stop_trips(stop_data, database, verbose=False):
+def store_trips(stop_data, database, verbose=False):
     '''Store stop trips data to the database'''
 
     cursor = database.cursor()
@@ -140,10 +140,9 @@ def store_stop_trips(stop_data, database, verbose=False):
     for dir_num, d in enumerate(stop_data['dir']):
         for t_num, t in enumerate(d['trips']):
             trip_id = "%s_%s_%d_%02d" % (route_id, service_id, dir_num, t_num)
-            last_time = None
-            last_abbr = None
             
-            node_times = dict()
+            # Gather the scheduled times for each node
+            nodes = list()
             skipped_stop = False
             for s_num, raw_time in enumerate(t):
 
@@ -152,7 +151,6 @@ def store_stop_trips(stop_data, database, verbose=False):
                     # Omit approximate time
                     gtime = ""
                 elif not raw_time:
-                    skipped_stop = True
                     gtime = None
                 else:
                     skipped_stop = False
@@ -160,19 +158,24 @@ def store_stop_trips(stop_data, database, verbose=False):
                     gtime = "%02d:%02d:00" % (hour, minute)
 
                 node_abbrs = d['headers'][s_num]
-                raw_node_abbr = ';'.join(node_abbrs)
-
-                # Sometimes, a stop is duplicated in the schedule
-                #if gtime == last_time and raw_node_abbr == last_abbr:
-                #    continue
-
                 assert len(node_abbrs) == 1
-                if gtime:
-                    node_times[node_abbrs[0].strip()] = gtime
-
-                last_time = gtime
-                last_abbr = raw_node_abbr
+                nodes.append((node_abbrs[0].strip(), gtime))
             
+            # Determine the time, and if there is a jump in the line
+            node_times = dict()
+            last_node = None
+            jumping = False
+            for node_abbr, gtime in nodes:
+                if gtime is None:
+                    jumping = True
+                    if last_node:
+                        node_times[last_node][1] = jumping
+                else:
+                    jumping = False
+                node_times[node_abbr] = [gtime, jumping]
+                last_node = node_abbr
+            
+            # Run through all the stops on this trip
             sql = ('SELECT stop_abbr, node_abbr, ' +
                    ' stop_id, sequence FROM line_stops WHERE' +
                    " line_no='%s' AND line_dir='%s';")
@@ -180,21 +183,19 @@ def store_stop_trips(stop_data, database, verbose=False):
             stops = dict()
             for stop_abbr, node_abbr, stop_id, sequence in cursor.execute(sql):
                 stops[int(sequence)] = (stop_abbr, node_abbr, stop_id)
-            s = 1
-            skipped_stops = False
-            for k in sorted(stops.keys()):
-                stop_abbr, node_abbr, stop_id = stops[k]
+            jumping = False
+            last_time = None
+            for sequence in sorted(stops.keys()):
+                stop_abbr, node_abbr, stop_id = stops[sequence]
                 if node_abbr:
                     if node_abbr in node_times:
-                        gtime = node_times[node_abbr]
-                        skipped_stops = (gtime is None)
+                        gtime, jumping = node_times[node_abbr]
                     else:
-                        complaints.add('No time for node "%s" stop "%s" seq %s' % ( node_abbr, stop_abbr, sequence))
+                        complaints.add('No time for node "%s" stop "%s" seq %s trip num %s' % ( node_abbr, stop_abbr, sequence, t_num))
                 else:
                     gtime = ""
-                if skipped_stops:
-                    stop_times.append((trip_id, gtime, gtime, stop_abbr, stop_id, str(s)))
-                    s+=1
+                if not jumping:
+                    stop_times.append((trip_id, gtime, gtime, stop_abbr, stop_id, str(sequence)))
 
     if complaints and verbose:
         print "\n".join(sorted(list(complaints)))
