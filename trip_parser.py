@@ -1,18 +1,18 @@
 #!/usr/bin/env python
-'''Parse a trapeze stop trips text file'''
+'''Parse a trapeze trips text file'''
 
 
 def is_useful(full_path):
-    '''Return True if a file is a Stop Trips file'''
+    '''Return True if a file is a Trips file'''
     if not full_path.lower().endswith('.txt'):
         return False
-    key_string = 'Stop Trips'
+    key_string = 'Trips'
     first_bits = open(full_path, 'r').read(len(key_string))
     return first_bits == key_string
 
 
 def read(full_path, database, verbose=False):
-    '''Read a Stop Trips file'''
+    '''Read a Trips file'''
     text = open(full_path, 'rU').read()
     data = parse_trapeze_stop_trips(text)
     store_stop_trips(data, database, verbose)
@@ -20,14 +20,14 @@ def read(full_path, database, verbose=False):
 
 def parse_trapeze_text(text):
     '''Parse a trapeze file'''
-    if text.startswith('Stop Trips'):
+    if text.startswith('Trips'):
         return parse_trapeze_stop_trips(text)
     else:
         raise ValueError('Unknown Trapeze text dump')
 
 
 def parse_trapeze_stop_trips(text):
-    '''Parse a trapeze Stop Trips file'''
+    '''Parse a trapeze Trips file'''
     in_header = False
     header_done = False
     in_dir = False
@@ -78,21 +78,25 @@ def parse_trapeze_stop_trips(text):
                     for h in zip(*headers):
                         minimized_headers.append(
                             [x for x in h if x])
-                    assert(minimized_headers[0] == ['Pattern'])
-                    assert(minimized_headers[1] == ['INT'])
-                    assert(minimized_headers[2] == ['VAL'])
-                    final_headers = minimized_headers[3:]
+                    assert(minimized_headers[0] == ['Frz'])
+                    assert(minimized_headers[1] == ['Trip'])
+                    assert(minimized_headers[2] == ['Pattern'])
+                    assert(minimized_headers[3] == ['VehType'])
+                    assert(minimized_headers[4] == ['Block'])
+                    assert(minimized_headers[5] == ['INT'])
+                    assert(minimized_headers[6] == ['Tot RT'])
+                    final_headers = minimized_headers[7:]
                     d['dir'][-1]['headers'] = final_headers
                 else:
                     dir_headers.append(line)
             else:
                 dir_trips.append(
-                    [line[s:e].strip() for s, e in dir_fields][3:])
+                    [line[s:e].strip() for s, e in dir_fields][7:])
         else:
             if linenum == 0:
-                assert(line == 'Stop Trips')
+                assert(line == 'Trips')
             elif linenum == 1:
-                assert(line == '~~~~~~~~~~')
+                assert(line == '~~~~~')
             elif linenum == 2:
                 assert(line == '')
                 in_header = True
@@ -135,7 +139,7 @@ def store_stop_trips(stop_data, database, verbose=False):
     stop_ids = dict()
     for stop_abbr, line_no, line_dir, stop_id, seq in cursor.execute(
             line_stops_sql):
-        key = (stop_abbr, line_no, line_dir, seq)
+        key = (stop_abbr, line_no, line_dir)
         if not key in stop_ids:
             stop_ids[key] = []
         stop_ids[key].append(stop_id)
@@ -206,7 +210,7 @@ def pick_stop_id(stop_ids, stop_abbrs, route_id, dir_num, seq_num):
     candidates = set()
     complaint = None
     for stop_abbr in stop_abbrs:
-        key = (str(stop_abbr), str(route_id), str(dir_num), str(seq_num))
+        key = (str(stop_abbr), str(route_id), str(dir_num))
         candidates.update(stop_ids.get(key, []))
     if len(candidates) == 0:
         raise Exception('No stop ID candidates for stop_abbrs ' +
