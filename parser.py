@@ -180,6 +180,7 @@ def main(argv=None):
 
     # Read trip files
     for path, dirs, files in os.walk(input_folder):
+        files.sort()
         for f in files:
             full_path = os.path.abspath(os.path.join(path, f))
             if trip_parser.is_useful(full_path):
@@ -215,7 +216,7 @@ def main(argv=None):
     if validate:
         if verbose:
             print "Validating"
-        sys.path.append('./transitfeed-1.2.7')
+        sys.path.append('./transitfeed')
         import feedvalidator
 
         output = os.path.join(destination, 'validation-results.html')
