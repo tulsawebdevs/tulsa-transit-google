@@ -132,30 +132,6 @@ def store_stop_trips(stop_data, database, verbose=False):
     assert(len(res) > 0)
     route_ids = dict([(str(k), v) for k, v in res])
 
-    # Read all stop_ids
-    # Again, not ideal, but easier to do this on first insert
-    line_stops_sql = ('SELECT stop_abbr, line_no, line_dir, stop_id, ' +
-        ' sequence FROM line_stops;')
-    stop_ids = dict()
-    for stop_abbr, line_no, line_dir, stop_id, seq in cursor.execute(
-            line_stops_sql):
-        key = (stop_abbr, line_no, line_dir, seq)
-        if not key in stop_ids:
-            stop_ids[key] = []
-        stop_ids[key].append(stop_id)
-
-    # Read all node_ids
-    # Again, not ideal, but easier to do this on first insert
-    line_nodes_sql = ('SELECT node_abbr, line_no, line_dir, stop_id, ' +
-        ' sequence FROM line_nodes;')
-    node_ids = dict()
-    for node_abbr, line_no, line_dir, stop_id, seq in cursor.execute(
-            line_nodes_sql):
-        key = (node_abbr, line_no, line_dir)
-        if not key in node_ids:
-            node_ids[key] = []
-        node_ids[key].append(stop_id)
-
     line_id = stop_data['meta']['Line']
     route_id = route_ids[line_id]
     service_id = stop_data['meta']['Service']
@@ -168,62 +144,57 @@ def store_stop_trips(stop_data, database, verbose=False):
             last_abbr = None
             
             node_times = dict()
+            skipped_stop = False
             for s_num, raw_time in enumerate(t):
-                # Some are empty
-                if not raw_time:
-                    continue
 
                 # Trapeze uses '+' for approximate times (we think)
                 if '+' in raw_time:
                     # Omit approximate time
                     gtime = ""
+                elif not raw_time:
+                    skipped_stop = True
+                    gtime = None
                 else:
+                    skipped_stop = False
                     hour, minute = [int(x) for x in raw_time.split(':')]
                     gtime = "%02d:%02d:00" % (hour, minute)
 
-                stop_abbrs = d['headers'][s_num]
-                raw_stop_abbr = ';'.join(stop_abbrs)
+                node_abbrs = d['headers'][s_num]
+                raw_node_abbr = ';'.join(node_abbrs)
 
                 # Sometimes, a stop is duplicated in the schedule
-                if gtime == last_time and raw_stop_abbr == last_abbr:
-                    continue
+                #if gtime == last_time and raw_node_abbr == last_abbr:
+                #    continue
 
-                assert len(stop_abbrs) == 1
+                assert len(node_abbrs) == 1
                 if gtime:
-                    node_times[stop_abbrs[0]] = gtime
+                    node_times[node_abbrs[0].strip()] = gtime
 
                 last_time = gtime
-                last_abbr = raw_stop_abbr
+                last_abbr = raw_node_abbr
             
-            # Load from database from trip_stop
-            # RouteID 
-            # ServiceID
-            # DirNum
-            # TripNum
-            # StopID 
-            # Sequence
-            # NodeAbbr or Null
-            # Order by seq
-            
-            # for stop in stops:
-            #    if nodeabbr:
-            #       time = node_times[nodeabbr]
-            #    else:
-            #       time = ""
-            # stop_time.append(trip_id, time, time, nodeabbr, stopid, seq+1)
-
-            # s_num = 0
-            # while True:
-            #     try:
-            #         stop_id, complaint = pick_stop_id(stop_ids, stop_abbrs,
-            #             node_ids, stop_abbrs, route_id, dir_num, s_num + 1)
-            #     except:
-            #         break
-            #     if complaint:
-            #         complaints.add(complaint)
-            #     stop_times.append((trip_id, gtime, gtime, raw_stop_abbr,
-            #         stop_id, s_num + 1))
-            #     s_num += 1
+            sql = ('SELECT stop_abbr, node_abbr, ' +
+                   ' stop_id, sequence FROM line_stops WHERE' +
+                   " line_no='%s' AND line_dir='%s';")
+            sql = sql % (route_id, dir_num)
+            stops = dict()
+            for stop_abbr, node_abbr, stop_id, sequence in cursor.execute(sql):
+                stops[int(sequence)] = (stop_abbr, node_abbr, stop_id)
+            s = 1
+            skipped_stops = False
+            for k in sorted(stops.keys()):
+                stop_abbr, node_abbr, stop_id = stops[k]
+                if node_abbr:
+                    if node_abbr in node_times:
+                        gtime = node_times[node_abbr]
+                        skipped_stops = (gtime is None)
+                    else:
+                        complaints.add('No time for node "%s" stop "%s" seq %s' % ( node_abbr, stop_abbr, sequence))
+                else:
+                    gtime = ""
+                if skipped_stops:
+                    stop_times.append((trip_id, gtime, gtime, stop_abbr, stop_id, str(s)))
+                    s+=1
 
     if complaints and verbose:
         print "\n".join(sorted(list(complaints)))

@@ -45,6 +45,7 @@ DATABASE_SCHEMA = {
     'line_stops': (
         ('stop_id', 'int', False),
         ('stop_abbr', 'text', False),
+        ('node_abbr', 'text', False),
         ('line_no', 'text', False),
         ('line_dir', 'text', False),
         ('sequence', 'text', False),
