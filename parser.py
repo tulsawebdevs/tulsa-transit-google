@@ -50,6 +50,15 @@ DATABASE_SCHEMA = {
         ('sequence', 'text', False),
         ('active', 'int', False),
     ),
+    'line_nodes': (
+        ('stop_id', 'int', False),
+        ('stop_abbr', 'text', False),
+        ('node_abbr', 'text', False),
+        ('line_no', 'text', False),
+        ('line_dir', 'text', False),
+        ('sequence', 'text', False),
+        ('active', 'int', False),
+    ),
     'trips': (
         ('route_id', 'int', True),
         ('service_id', 'int', True),

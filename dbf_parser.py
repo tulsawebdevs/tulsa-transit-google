@@ -112,11 +112,21 @@ DBF_MAPPING = {
             ('LineColor', 'route_text_color', convert_text_color),
             ('', 'active', lambda x: 1),
         )},
-    'nodesbyline': {
+    'stopsbyline': {
         'table': 'line_stops',
         'fields': (
             ('StopId', 'stop_id'),
-            ('NodeAbbr', 'stop_abbr'),
+            ('StopAbbr', 'stop_abbr'),
+            ('LineDirId', 'line_no', line_no_transformer),
+            ('LineDirId', 'line_dir', line_dir_transformer),
+            ('Sequence', 'sequence'),
+        )},
+    'nodesbyline': {
+        'table': 'line_nodes',
+        'fields': (
+            ('StopId', 'stop_id'),
+            ('StopAbbr', 'stop_abbr'),
+            ('NodeAbbr', 'node_abbr'),
             ('LineDirId', 'line_no', line_no_transformer),
             ('LineDirId', 'line_dir', line_dir_transformer),
             ('Sequence', 'sequence'),

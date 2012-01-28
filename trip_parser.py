@@ -139,10 +139,22 @@ def store_stop_trips(stop_data, database, verbose=False):
     stop_ids = dict()
     for stop_abbr, line_no, line_dir, stop_id, seq in cursor.execute(
             line_stops_sql):
-        key = (stop_abbr, line_no, line_dir)
+        key = (stop_abbr, line_no, line_dir, seq)
         if not key in stop_ids:
             stop_ids[key] = []
         stop_ids[key].append(stop_id)
+
+    # Read all node_ids
+    # Again, not ideal, but easier to do this on first insert
+    line_nodes_sql = ('SELECT node_abbr, line_no, line_dir, stop_id, ' +
+        ' sequence FROM line_nodes;')
+    node_ids = dict()
+    for node_abbr, line_no, line_dir, stop_id, seq in cursor.execute(
+            line_nodes_sql):
+        key = (node_abbr, line_no, line_dir)
+        if not key in node_ids:
+            node_ids[key] = []
+        node_ids[key].append(stop_id)
 
     line_id = stop_data['meta']['Line']
     route_id = route_ids[line_id]
@@ -154,6 +166,8 @@ def store_stop_trips(stop_data, database, verbose=False):
             trip_id = "%s_%s_%d_%02d" % (route_id, service_id, dir_num, t_num)
             last_time = None
             last_abbr = None
+            
+            node_times = dict()
             for s_num, raw_time in enumerate(t):
                 # Some are empty
                 if not raw_time:
@@ -174,14 +188,42 @@ def store_stop_trips(stop_data, database, verbose=False):
                 if gtime == last_time and raw_stop_abbr == last_abbr:
                     continue
 
-                stop_id, complaint = pick_stop_id(stop_ids, stop_abbrs,
-                    route_id, dir_num, s_num + 1)
-                if complaint:
-                    complaints.add(complaint)
-                stop_times.append((trip_id, gtime, gtime, raw_stop_abbr,
-                    stop_id, s_num + 1))
+                assert len(stop_abbrs) == 1
+                if gtime:
+                    node_times[stop_abbrs[0]] = gtime
+
                 last_time = gtime
                 last_abbr = raw_stop_abbr
+            
+            # Load from database from trip_stop
+            # RouteID 
+            # ServiceID
+            # DirNum
+            # TripNum
+            # StopID 
+            # Sequence
+            # NodeAbbr or Null
+            # Order by seq
+            
+            # for stop in stops:
+            #    if nodeabbr:
+            #       time = node_times[nodeabbr]
+            #    else:
+            #       time = ""
+            # stop_time.append(trip_id, time, time, nodeabbr, stopid, seq+1)
+
+            # s_num = 0
+            # while True:
+            #     try:
+            #         stop_id, complaint = pick_stop_id(stop_ids, stop_abbrs,
+            #             node_ids, stop_abbrs, route_id, dir_num, s_num + 1)
+            #     except:
+            #         break
+            #     if complaint:
+            #         complaints.add(complaint)
+            #     stop_times.append((trip_id, gtime, gtime, raw_stop_abbr,
+            #         stop_id, s_num + 1))
+            #     s_num += 1
 
     if complaints and verbose:
         print "\n".join(sorted(list(complaints)))
@@ -204,14 +246,17 @@ def store_stop_trips(stop_data, database, verbose=False):
     database.commit()
 
 
-def pick_stop_id(stop_ids, stop_abbrs, route_id, dir_num, seq_num):
+def pick_stop_id(stop_ids, stop_abbrs, node_ids, node_abbrs, route_id, dir_num, seq_num):
     '''Find a stop ID, or die trying'''
     stop_id = None
     candidates = set()
     complaint = None
     for stop_abbr in stop_abbrs:
-        key = (str(stop_abbr), str(route_id), str(dir_num))
+        key = (str(stop_abbr), str(route_id), str(dir_num), str(seq_num))
         candidates.update(stop_ids.get(key, []))
+    for node_abbr in node_abbrs:
+        key = (str(node_abbr), str(route_id), str(dir_num))
+        candidates.update(node_ids.get(key, []))
     if len(candidates) == 0:
         raise Exception('No stop ID candidates for stop_abbrs ' +
             ','.join(stop_abbrs))
