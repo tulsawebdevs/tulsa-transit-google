@@ -1,4 +1,4 @@
-#!/usr/bin/python2.4
+#!/usr/bin/env python
 #
 # Copyright 2007 Google Inc. All Rights Reserved.
 #
@@ -23,7 +23,7 @@ __author__ = 'chris.harrelson.code@gmail.com (Chris Harrelson)'
 
 import csv
 import glob
-import ogr
+from osgeo import ogr
 import os
 import shutil
 import sys
