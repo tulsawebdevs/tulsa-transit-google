@@ -133,6 +133,22 @@ def write_gtf_text(database, destination_folder, schema):
     return out_files
 
 
+def load_same_stops(same_stops_path, verbose=True):
+    same_stops = dict()
+    try:
+        with open(same_stops_path, 'r') as f:
+            reader = csv.reader(f)
+            reader.next()  # Throw away headers
+            for row in reader:
+                stop_id, stop_name, replacement_id, replacement_name = row
+                same_stops[int(stop_id)] = int(replacement_id)
+    except IOError:
+        # File doesn't exist
+        if verbose:
+            print 'Error reading "%s" - continuing without same stop checking' % same_stops_path
+        
+    return same_stops
+
 class Usage(Exception):
     def __init__(self, msg):
         self.msg = msg
@@ -146,6 +162,7 @@ def main(argv=None):
     base_path = os.path.abspath(os.path.dirname(__file__))
     input_folder = os.path.join(base_path, 'input')
     destination = os.path.join(base_path, 'output', 'feed')
+    fixups_folder = os.path.join(base_path, 'fixups')
     database_path = ':memory:'
     try:
         try:
@@ -179,6 +196,10 @@ def main(argv=None):
     database = sqlite3.connect(database_path)
     create_db(database, schema, True)
 
+    # Read Same Stops file
+    same_stops_path = os.path.join(fixups_folder, 'same_stops.csv')
+    same_stops = load_same_stops(same_stops_path)
+
     # Read DBF files
     for path, dirs, files in os.walk(input_folder):
         for f in files:
@@ -196,7 +217,7 @@ def main(argv=None):
             if trip_parser.is_useful(full_path):
                 if verbose:
                     print "Parsing trip file '%s'" % full_path
-                trip_parser.read(full_path, database, verbose)
+                trip_parser.read(full_path, database, verbose, same_stops)
 
     # Activate stops if they are in a schedule
     database.execute('UPDATE stops SET active=1 WHERE stops.stop_id IN' +

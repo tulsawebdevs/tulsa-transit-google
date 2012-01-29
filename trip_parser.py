@@ -11,11 +11,11 @@ def is_useful(full_path):
     return first_bits == key_string
 
 
-def read(full_path, database, verbose=False):
+def read(full_path, database, verbose=False, same_stops=None):
     '''Read a Trips file'''
     text = open(full_path, 'rU').read()
     data = parse_trapeze_stop_trips(text)
-    store_trips(data, database, verbose)
+    store_trips(data, database, verbose, same_stops)
 
 
 def parse_trapeze_text(text):
@@ -120,10 +120,12 @@ def parse_trapeze_stop_trips(text):
     return d
 
 
-def store_trips(stop_data, database, verbose=False):
+def store_trips(stop_data, database, verbose=False, same_stops=None):
     '''Store stop trips data to the database'''
 
     cursor = database.cursor()
+    if same_stops is None:
+        same_stops = dict()
 
     # Gather line_no to route_ids
     # Not ideal, but simplifies things down the line
@@ -193,6 +195,8 @@ def store_trips(stop_data, database, verbose=False):
             count = 0
             for sequence in sorted(stops.keys()):
                 stop_abbr, node_abbr, stop_id = stops[sequence]
+                if stop_id in same_stops:
+                    stop_id = same_stops[stop_id]
                 if node_abbr:
                     if node_abbr in node_times:
                         gtime, jumping = node_times[node_abbr].pop(0)
