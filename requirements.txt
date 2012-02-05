@@ -1,4 +1,10 @@
 # This is a pip requirement file.  See http://pypi.python.org/pypi/pip
-http://downloads.sourceforge.net/project/dbfpy/dbfpy/2.2.5/dbfpy-2.2.5.tar.gz?r=http%3A%2F%2Fsourceforge.net%2Fprojects%2Fdbfpy%2Ffiles%2Fdbfpy%2F2.2.5%2Fdbfpy-2.2.5.tar.gz%2Fdownload&ts=1305036353&use_mirror=softlayer
-simplejson
-pytz
+# dbfpy can't be easily downloaded as of Feb 2012
+# dbfpy==2.2.5
+http://downloads.sourceforge.net/project/dbfpy/dbfpy/2.2.5/dbfpy-2.2.5.tar.gz?r=http%3A%2F%2Fsourceforge.net%2Fprojects%2Fdbfpy%2Ffile
+
+Django==1.3.1
+psycopg2==2.4.4
+pytz==2011n
+simplejson==2.3.2
+wsgiref==0.1.2
