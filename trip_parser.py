@@ -1,5 +1,8 @@
 #!/usr/bin/env python
-'''Parse a trapeze trips text file'''
+'''Parse a trapeze trips text file
+
+NOTE: These files don't have enough information to create an accurate schedule
+'''
 
 
 def is_useful(full_path):
@@ -242,23 +245,3 @@ def store_trips(stop_data, database, verbose=False, same_stops=None):
     cursor.executemany(trips_sql, trips)
     cursor.close()
     database.commit()
-
-
-def pick_stop_id(stop_ids, stop_abbrs, node_ids, node_abbrs, route_id, dir_num, seq_num):
-    '''Find a stop ID, or die trying'''
-    stop_id = None
-    candidates = set()
-    complaint = None
-    for stop_abbr in stop_abbrs:
-        key = (str(stop_abbr), str(route_id), str(dir_num), str(seq_num))
-        candidates.update(stop_ids.get(key, []))
-    for node_abbr in node_abbrs:
-        key = (str(node_abbr), str(route_id), str(dir_num))
-        candidates.update(node_ids.get(key, []))
-    if len(candidates) == 0:
-        raise Exception('No stop ID candidates for stop_abbrs ' +
-            ','.join(stop_abbrs))
-    if len(candidates) > 1:
-        complaint = 'For stop_abbr %s, multiple stop candidates %s' % (
-            ','.join(stop_abbrs), ','.join([str(c) for c in candidates]))
-    return candidates.pop(), complaint

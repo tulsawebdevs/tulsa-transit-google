@@ -11,11 +11,11 @@ def is_useful(full_path):
     return first_bits == key_string
 
 
-def read(full_path, database, verbose=False):
+def read(full_path, database, verbose=False, same_stops=None):
     '''Read a Stop Trips file'''
     text = open(full_path, 'rU').read()
     data = parse_trapeze_stop_trips(text)
-    store_stop_trips(data, database, verbose)
+    store_stop_trips(data, database, verbose, same_stops)
 
 
 def parse_trapeze_text(text):
@@ -70,10 +70,13 @@ def parse_trapeze_stop_trips(text):
                             elif char == '~':
                                 start = column
                             last_char = char
-                    dir_fields.append((start, column))
+                    last_start, last_column = dir_fields[-1]
+                    if last_start != start:
+                        dir_fields.append((start, column))
                     headers = list()
                     for h in dir_headers:
-                        headers.append([h[s:e].strip() for s, e in dir_fields])
+                        headers.append([h[s:e].strip() for s, e in
+                            dir_fields])
                     minimized_headers = list()
                     for h in zip(*headers):
                         minimized_headers.append(
@@ -116,7 +119,7 @@ def parse_trapeze_stop_trips(text):
     return d
 
 
-def store_stop_trips(stop_data, database, verbose=False):
+def store_stop_trips(stop_data, database, verbose=False, same_stops=None):
     '''Store stop trips data to the database'''
 
     cursor = database.cursor()
@@ -128,50 +131,60 @@ def store_stop_trips(stop_data, database, verbose=False):
     assert(len(res) > 0)
     route_ids = dict([(str(k), v) for k, v in res])
 
-    # Read all stop_ids
-    # Again, not ideal, but easier to do this on first insert
-    line_stops_sql = ('SELECT stop_abbr, line_no, line_dir, stop_id, ' +
-        ' sequence FROM line_stops;')
-    stop_ids = dict()
-    for stop_abbr, line_no, line_dir, stop_id, seq in cursor.execute(
-            line_stops_sql):
-        key = (stop_abbr, line_no, line_dir, seq)
-        if not key in stop_ids:
-            stop_ids[key] = []
-        stop_ids[key].append(stop_id)
-
     line_id = stop_data['meta']['Line']
     route_id = route_ids[line_id]
     service_id = stop_data['meta']['Service']
     stop_times = list()
     complaints = set()
     for dir_num, d in enumerate(stop_data['dir']):
+        # Read all stop_ids
+        # Again, not ideal, but easier to do this on first insert
+        line_stops_sql = (
+            "SELECT stop_abbr, node_abbr, stop_id, sequence"
+            " FROM line_stops"
+            " WHERE line_no='%s' AND line_dir='%s';" % 
+            (route_id, dir_num))
+        stop_ids = dict()
+        for stop_abbr, node_abbr, stop_id, seq in (
+                cursor.execute(line_stops_sql)):
+            if node_abbr:
+                key = (node_abbr, seq)
+                stop_ids.setdefault(key, []).append(stop_id)
+            key = (stop_abbr, seq)
+            stop_ids.setdefault(key, []).append(stop_id)
+            key = ('', seq)
+            stop_ids.setdefault(key, []).append(stop_id)
+        
         for t_num, t in enumerate(d['trips']):
             trip_id = "%s_%s_%d_%02d" % (route_id, service_id, dir_num, t_num)
             last_time = None
             last_abbr = None
             for s_num, raw_time in enumerate(t):
-                # Some are empty
+                # Some are empty - stop is skipped this trip
                 if not raw_time:
                     continue
 
-                # Trapeze uses '+' for approximate times (we think)
-                if '+' in raw_time:
-                    # Omit approximate time
+                stop_abbrs = d['headers'][s_num]
+                raw_stop_abbr = ';'.join(stop_abbrs)
+
+                # Our best guess:
+                # If stop abbr is included, trapeze uses '+' for approximate
+                # If stop_abbr is empty, then is is approximate
+                # Omit approximate times (Google will estimate) unless it's
+                #  the first or last stop in a trip
+                first_stop = (s_num == 0)
+                last_stop = (s_num + 1 == len(t))
+                approximate = '+' in raw_time or raw_stop_abbr == ''
+                if (approximate and (not first_stop and not last_stop)):
                     gtime = ""
                 else:
                     hour, minute = [int(x) for x in raw_time.split(':')]
                     gtime = "%02d:%02d:00" % (hour, minute)
 
-                stop_abbrs = d['headers'][s_num]
-                raw_stop_abbr = ';'.join(stop_abbrs)
-
-                # Sometimes, a stop is duplicated in the schedule
-                if gtime == last_time and raw_stop_abbr == last_abbr:
-                    continue
-
                 stop_id, complaint = pick_stop_id(stop_ids, stop_abbrs,
                     route_id, dir_num, s_num + 1)
+                if stop_id in same_stops:
+                    stop_id = same_stops[stop_id]
                 if complaint:
                     complaints.add(complaint)
                 stop_times.append((trip_id, gtime, gtime, raw_stop_abbr,
@@ -205,9 +218,18 @@ def pick_stop_id(stop_ids, stop_abbrs, route_id, dir_num, seq_num):
     stop_id = None
     candidates = set()
     complaint = None
-    for stop_abbr in stop_abbrs:
-        key = (str(stop_abbr), str(route_id), str(dir_num), str(seq_num))
+
+    # 0 and 1 - stop_abbrs are node_abbr or omitted
+    # 1 and 2 - stop_abbrs are node_abbr and stop_abbr
+    assert(len(stop_abbrs) in [0,1,2])
+
+    for abbr in stop_abbrs:
+        key = (str(abbr), str(seq_num))
         candidates.update(stop_ids.get(key, []))
+    else:
+        key = ('', str(seq_num))
+        candidates.update(stop_ids.get(key, []))
+
     if len(candidates) == 0:
         raise Exception('No stop ID candidates for stop_abbrs ' +
             ','.join(stop_abbrs))

@@ -21,7 +21,7 @@ import sys
 import zipfile
 
 import dbf_parser
-import trip_parser
+import stop_trip_parser
 
 DATABASE_SCHEMA = {
     'stops': (
@@ -214,10 +214,11 @@ def main(argv=None):
         files.sort()
         for f in files:
             full_path = os.path.abspath(os.path.join(path, f))
-            if trip_parser.is_useful(full_path):
+            if stop_trip_parser.is_useful(full_path):
                 if verbose:
                     print "Parsing trip file '%s'" % full_path
-                trip_parser.read(full_path, database, verbose, same_stops)
+                stop_trip_parser.read(full_path, database, verbose,
+                                      same_stops)
 
     # Activate stops if they are in a schedule
     database.execute('UPDATE stops SET active=1 WHERE stops.stop_id IN' +
