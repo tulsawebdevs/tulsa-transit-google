@@ -1,0 +1,21 @@
+{% extends 'ttg/base.html' %}
+{% block title %}Tulsa Transit as GTFS Feed{% endblock %}
+{% block body %}
+<h1>Tulsa Transit as GTFS</h1>
+<p>
+This is the <a href="http://tulsawebdevs.org/">Tulsa Web Devs'</a> project
+to get <a href="http://tulsatransit.org/">Tulsa Transit's</a> route and
+schedule data into the 
+<a href="https://developers.google.com/transit/gtfs/reference">
+General Transit Feed Specification</a> (GTFS), a necessary step to get Tulsa's
+buses into
+<a href="http://maps.google.com/maps?saddr=fab+lab&daddr=hardesty+library&hl=en&ll=36.08906,-95.920944&spn=0.159528,0.210457&sll=36.087805,-95.908445&sspn=0.15953,0.210457&geocode=Fd2cJwIdecpH-iHxn8YQoB5qiSldhY208-y2hzE9ZpWyKiQm0Q%3BFZ28JQIdVO9I-iEfZtX30cXLKimBDtSqDo62hzFWUu0ERxi5Vw&dirflg=r&ttype=now&noexp=0&noal=0&sort=def&mra=ltm&t=h&z=12&start=0">Google Maps.</a>
+See
+<a href="https://github.com/tulsawebdevs/tulsa-transit-google">
+the project page</a> for more information.
+</p>
+<ul>
+<li><a href="{% url feed_zip 'current' %}">The current GTFS feed</a>
+<li><a href="{% url viewer 'current' %}">View the current GTFS data on a map</a>
+</ul>
+{% endblock %}

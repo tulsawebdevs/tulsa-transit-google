@@ -2,3 +2,5 @@ pep8
 # Requires installing the GDAL libraries first
 gdal
 ipdb
+# For admin documentation
+docutils==0.8.1
