@@ -1,4 +1,4 @@
-# Django settings for ttg_app project.
+# Django settings for ttg_project project.
 
 try:
     import docutils
@@ -121,7 +121,7 @@ MIDDLEWARE_CLASSES = (
     'django.contrib.messages.middleware.MessageMiddleware',
 )
 
-ROOT_URLCONF = 'ttg_app.urls'
+ROOT_URLCONF = 'ttg_project.urls'
 
 TEMPLATE_DIRS = (
     # Put strings here, like "/home/html/django_templates" or "C:/www/django/templates".

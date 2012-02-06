@@ -5,8 +5,8 @@ from django.contrib import admin
 admin.autodiscover()
 
 urlpatterns = patterns('',
-    url(r'^$', 'ttg_app.ttg.views.home', name='home'),
-    url(r'^ttg/', include('ttg_app.ttg.urls')),
+    url(r'^$', 'ttg_project.ttg.views.home', name='home'),
+    url(r'^ttg/', include('ttg_project.ttg.urls')),
 )
 
 if settings.ENABLE_ADMIN_DOCS:

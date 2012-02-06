@@ -23,5 +23,5 @@
 validation-results.html
 
 # Django
-/ttg_app/local_settings.py
-/ttg.sqlite
+/ttg_project/local_settings.py
+/ttg_project/ttg.sqlite
