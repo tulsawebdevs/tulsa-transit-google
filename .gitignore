@@ -25,3 +25,5 @@ validation-results.html
 # Django
 /ttg_project/local_settings.py
 /ttg_project/ttg.sqlite
+/ttg_project/media
+!/ttg_project/media/.keep

@@ -1,0 +1,31 @@
+{% extends 'ttg/base.html' %}
+{% block title %}Files{% endblock %}
+{% block body %}
+<h1>Files</h1>
+<table>
+<tr><th>File Name</th><th>Date Added</th><th>Source</th></tr>
+{% for f in files %}
+<tr>
+    <td><a href="{{MEDIA_URL}}{{f.local_name}}">{{f.local_name}}</td>
+    <td>{{f.added_at}}</td>
+    <td>{{f.source}}</td>
+</tr>
+{% empty %}
+<tr><td span=3><em>None</em></td></tr>
+{% endfor %}
+</table>
+
+<h2>Upload New</h2>
+{% if messages %}
+<ul class="messages">
+    {% for message in messages %}
+    <li{% if message.tags %} class="{{ message.tags }}"{% endif %}>{{ message }}</li>
+    {% endfor %}
+</ul>
+{% endif %}
+<form method="post" enctype="multipart/form-data">
+{{ form.as_p }}
+{% csrf_token %}
+<input type="submit" value="Submit" />
+</form>
+{% endblock %}
