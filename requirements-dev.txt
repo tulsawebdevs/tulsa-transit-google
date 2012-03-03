@@ -1,6 +1,19 @@
+# Detect deviations from PEP8 standard formatting 
 pep8
+
+# Geospatial Data Abstraction Library
+# For testing reading Tulsa Transit shape files
 # Requires installing the GDAL libraries first
-gdal
+# GDAL==1.8.1
+
+# Command-line interpreter and debugger with auto-completion
+ipython
 ipdb
+
 # For admin documentation
 docutils==0.8.1
+
+# For ./manage.py runserver_plus
+django-extensions
+Werkzeug
+
