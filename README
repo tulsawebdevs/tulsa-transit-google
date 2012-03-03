@@ -7,8 +7,8 @@ To run the project:
 3. Run 'source ./bin/activate' to activate the virtualenv
 4. Extract data from the Tulsa Transit Authority into the input folder.  We haven't gotten clearance to distribute this data, so please don't check it into the project.
 5. Run ./parser.py to parse the input data into the output folder
-6. Run 'python transitfeed/feedvalidator.py output/feed/feed.zip' to validate
-7. Run 'python transitfeed/schedule_viewer.py output/feed/feed.zip' to view the schedule
+6. Run 'feedvalidator.py output/feed/feed.zip' to validate
+7. Run 'schedule_viewer.py output/feed/feed.zip' to view the schedule
 
 Required files for this project
 ===============================

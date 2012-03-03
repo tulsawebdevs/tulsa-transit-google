@@ -248,13 +248,12 @@ def main(argv=None):
     if validate:
         if verbose:
             print "Validating"
-        sys.path.append('./transitfeed')
-        import feedvalidator
-
-        output = os.path.join(destination, 'validation-results.html')
-        old_argv = sys.argv
-        sys.argv = [sys.argv[0], zip_path, '--output=%s' % output]
-        return feedvalidator.main()
+        import subprocess
+        
+        output = os.path.abspath(os.path.join(
+            destination, 'validation-results.html'))
+        return subprocess.call(['feedvalidator.py', zip_path,
+                                '--output=%s' % output])
     else:
         return 0
 
