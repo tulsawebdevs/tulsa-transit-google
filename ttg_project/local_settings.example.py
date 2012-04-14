@@ -1,6 +1,7 @@
 # Copy to local_settings.py and modify as desired
 
 import os.path
+import sys
 ROOT = os.path.dirname(os.path.abspath(__file__))
 path = lambda *a: os.path.join(ROOT, *a)
 
@@ -27,3 +28,9 @@ except ImportError:
     pass
 else:
     LOCAL_INSTALLED_APPS.append('django_extensions')
+
+# To use nose to run tests, install django_nose and enable below
+if False and 'test' in sys.argv:
+    DATABASES['default']['NAME'] = ':memory:'
+    LOCAL_INSTALLED_APPS.append('django_nose')
+    TEST_RUNNER = 'django_nose.NoseTestSuiteRunner'
