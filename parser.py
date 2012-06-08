@@ -22,6 +22,7 @@ import zipfile
 
 import dbf_parser
 import stop_trip_parser
+import shapes_parser
 
 DATABASE_SCHEMA = {
     'stops': (
@@ -66,6 +67,7 @@ DATABASE_SCHEMA = {
         ('trip_id', 'text', True),
         ('trip_headsign', 'int', True),
         ('direction_id', 'int', True),
+        ('shape_id', 'text', True),
         ('active', 'int', False),
     ),
     'stop_times': (
@@ -75,6 +77,13 @@ DATABASE_SCHEMA = {
         ('stop_id', 'int', True),
         ('stop_sequence', 'int', True),
         ('x_stop_abbr', 'text', False),
+        ('active', 'int', False),
+    ),
+    'shapes': (
+        ('shape_id', 'text', True),
+        ('shape_pt_lat', 'text', True),
+        ('shape_pt_lon', 'text', True),
+        ('shape_pt_sequence', 'int', True),
         ('active', 'int', False),
     ),
 }
@@ -219,6 +228,16 @@ def main(argv=None):
                     print "Parsing trip file '%s'" % full_path
                 stop_trip_parser.read(full_path, database, verbose,
                                       same_stops)
+    
+    # Read trips shape file
+    for path, dirs, files in os.walk(input_folder):
+        files.sort()
+        for f in files:
+            full_path = os.path.abspath(os.path.join(path, f))
+            if shapes_parser.is_useful(full_path):
+                if verbose:
+                    print "Parsing shapes file '%s'" % full_path
+                shapes_parser.read(full_path, database, verbose)
 
     # Activate stops if they are in a schedule
     database.execute('UPDATE stops SET active=1 WHERE stops.stop_id IN' +

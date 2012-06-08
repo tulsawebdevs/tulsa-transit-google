@@ -10,6 +10,7 @@ pytz==2011n
 simplejson==2.3.2
 wsgiref==0.1.2
 transitfeed==1.2.11
+pyshp==1.1.4
 
 # Work in progress
 git+git://github.com/tulsawebdevs/django-multi-gtfs.git#egg=multigtfs
