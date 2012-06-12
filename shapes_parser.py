@@ -14,7 +14,7 @@ BREAK_STUFF = 1
 
 def is_useful(full_path):
     name = os.path.split(full_path)[-1].lower()
-    useful = name.startswith('line') and name.endswith('.shp')
+    useful = (name.startswith('line') or name.startswith('pattern')) and name.endswith('.shp')
     if useful and not BREAK_STUFF:
         print "I'd parse '%s', but shape parsing isn't working yet" % full_path
         return False
@@ -51,7 +51,99 @@ def nearest_node(graph, lat, lon):
     return node_candidates[0][1]
 
 
-def read(lines_path, database, verbose=False):
+def read(full_path, database, verbose=False):
+    '''Read a shapefile into the database'''
+    name = os.path.split(full_path)[-1].lower()
+    if name.startswith('pattern'):
+        pass
+        #read_patterns(full_path, database, verbose)
+    elif name.startswith('lines'):
+        read_lines(full_path, database, verbose)
+
+
+def read_patterns(patterns_path, database, verbose=False):
+    '''
+    Read a patterns shapefile into the database
+    
+    This might be the one we want
+    '''
+    sf = shapefile.Reader(patterns_path)
+    assert sf.shapeType == 3  # PolyLine
+    shapes = sf.shapes()
+    PATTERN_ID_FIELD = 1
+    PATTERN_FIELD = 2
+    LINEDIR_ID_FIELD = 3
+    assert sf.fields[PATTERN_ID_FIELD][0] == 'PatternId'
+    assert sf.fields[PATTERN_FIELD][0] == 'Pattern'
+    assert sf.fields[LINEDIR_ID_FIELD][0] == 'LineDirId'
+
+    for record, shape in zip(sf.records(), shapes):
+        assert shape.shapeType == 3
+        pattern_id = record[PATTERN_ID_FIELD - 1]
+        pattern = record[PATTERN_FIELD - 1]
+        linedir_id = record[LINEDIR_ID_FIELD - 1]
+        
+        # Assemble parts
+        parts = []
+        part = None
+        for seq, (lon, lat) in enumerate(shape.points):
+            if seq in shape.parts:
+                # Start of a new shape
+                if part:
+                    # Parts could have more than 2 points, but MTTA
+                    # data has only 2-point parts
+                    assert len(part) == 2
+                    if part[0] != part[1]:
+                        # If not a point
+                        part.sort()
+                        parts.append((part[0], part[1]))
+                part = []
+            part.append((lat, lon))
+        if part:
+            parts.append((part[0], part[1]))
+        
+        # Create line
+        line = []
+        first_nodes = None
+        for seq, (node1, node2) in enumerate(parts):
+            print "%s %s %s %d: (%0.5f %0.5f) -> (%0.5f %0.5f)" % (
+                pattern_id, pattern, linedir_id, seq, node1[0], node1[1], node2[0], node2[1])
+            if first_nodes:
+                first_node1, first_node2 = first_nodes
+                if first_node1 == node1:
+                    line.extend([first_node2, first_node1, node2])
+                elif first_node1 == node2:
+                    line.extend([first_node2, first_node1, node1])
+                elif first_node2 == node1:
+                    line.extend([first_node1, first_node2, node2])
+                elif first_node2 == node2:
+                    line.extend([first_node1, first_node2, node1])
+                else:
+                    raise Exception('Discontinuity')
+                first_nodes = None
+            elif line:
+                last_node = line[-1]
+                pen_node = line[-2]
+                if last_node == node1:
+                    found = True
+                    line.append(node2)
+                elif last_node == node2:
+                    found = True
+                    line.append(node1)
+                elif pen_node == node1 or pen_node == node2:
+                    print "*** Tossing out last node (%0.5f %0.5f)" % last_node
+                    line.pop()
+                    if pen_node == node1:
+                        line.append(node2)
+                    else:
+                        line.append(node1)
+                else:
+                    print "*** Discontinuity - trying to recover"
+                    first_nodes = (node1, node2)
+            else:
+                first_nodes = (node1, node2)
+
+def read_lines(lines_path, database, verbose=False):
     '''Read an lines shapefile into the database'''
     sf = shapefile.Reader(lines_path)
     assert sf.shapeType == 3  # PolyLine
