@@ -27,17 +27,24 @@ def haversine(lon1, lat1, lon2, lat2):
     on the earth (specified in decimal degrees)
     
     From http://stackoverflow.com/questions/4913349/haversine-formula-in-python-bearing-and-distance-between-two-gps-points
+    with optimization for same point
     """
     # convert decimal degrees to radians 
     lon1, lat1, lon2, lat2 = map(radians, [lon1, lat1, lon2, lat2])
-    # haversine formula 
     dlon = lon2 - lon1 
-    dlat = lat2 - lat1 
-    a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
-    c = 2 * asin(sqrt(a)) 
-    km = 6367 * c
-    return km
+    dlat = lat2 - lat1
+    if dlon == 0.0 and dlat == 0.0:
+        return 0.0
+    else:
+        # haversine formula 
+        a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
+        c = 2 * asin(sqrt(a)) 
+        km = 6367 * c
+        return km
 
+
+def node_dist(node1, node2):
+    return haversine(node1[0], node1[1], node2[0], node2[1])
 
 def nearest_node(graph, lat, lon):
     """
@@ -55,10 +62,10 @@ def read(full_path, database, verbose=False):
     '''Read a shapefile into the database'''
     name = os.path.split(full_path)[-1].lower()
     if name.startswith('pattern'):
-        pass
-        #read_patterns(full_path, database, verbose)
+        read_patterns(full_path, database, verbose)
     elif name.startswith('lines'):
-        read_lines(full_path, database, verbose)
+        pass
+        #read_lines(full_path, database, verbose)
 
 
 def read_patterns(patterns_path, database, verbose=False):
@@ -76,6 +83,8 @@ def read_patterns(patterns_path, database, verbose=False):
     assert sf.fields[PATTERN_ID_FIELD][0] == 'PatternId'
     assert sf.fields[PATTERN_FIELD][0] == 'Pattern'
     assert sf.fields[LINEDIR_ID_FIELD][0] == 'LineDirId'
+    
+    trip_shapes = collections.defaultdict(list)
 
     for record, shape in zip(sf.records(), shapes):
         assert shape.shapeType == 3
@@ -106,42 +115,77 @@ def read_patterns(patterns_path, database, verbose=False):
         line = []
         first_nodes = None
         for seq, (node1, node2) in enumerate(parts):
-            print "%s %s %s %d: (%0.5f %0.5f) -> (%0.5f %0.5f)" % (
-                pattern_id, pattern, linedir_id, seq, node1[0], node1[1], node2[0], node2[1])
             if first_nodes:
                 first_node1, first_node2 = first_nodes
-                if first_node1 == node1:
-                    line.extend([first_node2, first_node1, node2])
-                elif first_node1 == node2:
-                    line.extend([first_node2, first_node1, node1])
-                elif first_node2 == node1:
-                    line.extend([first_node1, first_node2, node2])
-                elif first_node2 == node2:
-                    line.extend([first_node1, first_node2, node1])
+                # Sort node orders by shortest distance between segments
+                node_orders = sorted([
+                    (node_dist(first_node1, node1),
+                     (first_node2, first_node1, node1, node2)),
+                    (node_dist(first_node1, node2),
+                     (first_node2, first_node1, node2, node1)),
+                    (node_dist(first_node2, node1),
+                     (first_node1, first_node2, node1, node2)),
+                    (node_dist(first_node2, node2),
+                     (first_node2, first_node1, node2, node2))])
+                n1, n2, n3, n4 = node_orders[0][1]
+                # Optimize for shared point in the two segements
+                if n2 == n3:
+                    line.extend((n1, n2, n4))
                 else:
-                    raise Exception('Discontinuity')
+                    if verbose:
+                        print "Pattern %s:%s for line %s: Adding segment (%0.5f, %0.5f) -> (%0.5f, %0.5f) (%0.1f meters)" % (pattern_id, pattern, linedir_id, n2[0], n2[1], n3[0], n3[1], 1000.0 * node_dist(n2, n3))
+                    line.extend((n1, n2, n3, n4))
                 first_nodes = None
             elif line:
                 last_node = line[-1]
-                pen_node = line[-2]
-                if last_node == node1:
-                    found = True
-                    line.append(node2)
-                elif last_node == node2:
-                    found = True
-                    line.append(node1)
-                elif pen_node == node1 or pen_node == node2:
-                    print "*** Tossing out last node (%0.5f %0.5f)" % last_node
-                    line.pop()
-                    if pen_node == node1:
-                        line.append(node2)
-                    else:
-                        line.append(node1)
+                # Sort node orders by shortest distance to tail point
+                node_orders = sorted([
+                    (node_dist(last_node, node1),
+                     (last_node, node1, node2)),
+                    (node_dist(last_node, node2),
+                     (last_node, node2, node1))])
+                n1, n2, n3 = node_orders[0][1]
+                # Optimize for tail point in the new segment
+                if n1 == n2:
+                    line.append(n3)
                 else:
-                    print "*** Discontinuity - trying to recover"
-                    first_nodes = (node1, node2)
+                    if verbose:
+                        print "Pattern %s:%s for line %s: Adding segment (%0.5f, %0.5f) -> (%0.5f, %0.5f) (%0.1f meters)" % (pattern_id, pattern, linedir_id, n1[0], n1[1], n2[0], n2[1], 1000.0 * node_dist(n1, n2))
+                    line.extend((n2, n3))
             else:
+                # Collect the first segment for later
                 first_nodes = (node1, node2)
+        
+        # Write to database
+        shape_id = "%s_%s" % (pattern_id, pattern)
+        route_id = int(str(linedir_id)[:-1])
+        direction = int(str(linedir_id)[-1])
+        active = False
+        shape_sql = (
+            'INSERT INTO shapes'
+            ' (shape_id, shape_pt_lat, shape_pt_lon, shape_pt_sequence,'
+            ' active)'
+            ' VALUES (?, ?, ?, ?, ?);')
+        for seq, (lat, lon) in enumerate(line):
+            database.execute(shape_sql, (shape_id, lat, lon, seq, active))
+        
+        trip_shapes[(route_id, direction)].append((shape_id, line))
+    
+    # Assign shapes to trips
+    for route_id, direction in trip_shapes.keys():
+        trips_sql = (
+            'SELECT trip_id from trips'
+            ' WHERE route_id=? AND direction_id=? AND shape_id IS NULL'
+            '   AND active=1;')
+        update_trip_sql = 'UPDATE trips SET shape_id=? WHERE trip_id=?;'
+        update_shapes_sql = 'UPDATE shapes SET active=1 WHERE shape_id=?;'
+        res = database.execute(trips_sql, (route_id, direction))
+        for r in res.fetchall():
+            trip_id = r[0]
+            # TODO: Pick best shape for each trip
+            shape_id = trip_shapes[(route_id, direction)][0][0]
+            database.execute(update_trip_sql, (shape_id, trip_id))
+            database.execute(update_shapes_sql, (shape_id,))
 
 def read_lines(lines_path, database, verbose=False):
     '''Read an lines shapefile into the database'''
