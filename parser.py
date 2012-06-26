@@ -12,6 +12,7 @@ Convert a folder of DBF files to Google Transit Feed files.  Options:
 '''
 
 import csv
+import json
 import getopt
 import glob
 import os
@@ -32,6 +33,8 @@ DATABASE_SCHEMA = {
         ('stop_lon', 'int', True),
         ('stop_desc', 'text', True),
         ('stop_code', 'text', True),
+        ('location_type', 'int', True),
+        ('parent_station', 'text', True),
         ('active', 'int', False),
     ),
     'routes': (
@@ -142,22 +145,6 @@ def write_gtf_text(database, destination_folder, schema):
     return out_files
 
 
-def load_same_stops(same_stops_path, verbose=True):
-    same_stops = dict()
-    try:
-        with open(same_stops_path, 'r') as f:
-            reader = csv.reader(f)
-            reader.next()  # Throw away headers
-            for row in reader:
-                stop_id, stop_name, replacement_id, replacement_name = row
-                same_stops[int(stop_id)] = int(replacement_id)
-    except IOError:
-        # File doesn't exist
-        if verbose:
-            print 'Error reading "%s" - continuing without same stop checking' % same_stops_path
-        
-    return same_stops
-
 class Usage(Exception):
     def __init__(self, msg):
         self.msg = msg
@@ -171,7 +158,6 @@ def main(argv=None):
     base_path = os.path.abspath(os.path.dirname(__file__))
     input_folder = os.path.join(base_path, 'input')
     destination = os.path.join(base_path, 'output', 'feed')
-    fixups_folder = os.path.join(base_path, 'fixups')
     database_path = ':memory:'
     try:
         try:
@@ -205,9 +191,9 @@ def main(argv=None):
     database = sqlite3.connect(database_path)
     create_db(database, schema, True)
 
-    # Read Same Stops file
-    same_stops_path = os.path.join(fixups_folder, 'same_stops.csv')
-    same_stops = load_same_stops(same_stops_path)
+    # Read Fixups file
+    fixups_path = os.path.join(base_path, 'fixups.json')
+    fixups = json.load(file(fixups_path, 'r'))
 
     # Read DBF files
     for path, dirs, files in os.walk(input_folder):
@@ -216,7 +202,7 @@ def main(argv=None):
             if dbf_parser.is_useful(full_path):
                 if verbose:
                     print "Parsing DBF file '%s'" % full_path
-                dbf_parser.read(full_path, database, verbose)
+                dbf_parser.read(full_path, database, verbose, fixups)
 
     # Read trip files
     for path, dirs, files in os.walk(input_folder):
@@ -227,7 +213,7 @@ def main(argv=None):
                 if verbose:
                     print "Parsing trip file '%s'" % full_path
                 stop_trip_parser.read(full_path, database, verbose,
-                                      same_stops)
+                                      fixups)
     
     # Read trips shape file
     for path, dirs, files in os.walk(input_folder):
@@ -243,6 +229,24 @@ def main(argv=None):
     database.execute('UPDATE stops SET active=1 WHERE stops.stop_id IN' +
         ' (SELECT DISTINCT stop_times.stop_id FROM stop_times);')
     database.commit()
+    
+    # Add stations
+    for station in fixups.get('stations', []):
+        station_id = station['id']
+        station_name = station['name']
+        station_lat = station['latitude']
+        station_lon = station['longitude']
+        database.execute("""
+            INSERT INTO stops 
+            ('stop_id', 'stop_name', 'stop_lat', 'stop_lon', 'stop_desc',
+             'stop_code', 'location_type', 'parent_station', 'active')
+            VALUES (?, ?, ?, ?, '', '', 1, '', 1);""", 
+            (station_id, station_name, station_lat, station_lon))
+        for stop in station['stops']:
+            stop_id = stop['id']
+            database.execute(
+                "UPDATE stops SET parent_station=? WHERE stop_id=?",
+                (station_id, stop_id))
 
     # Write from database to Google Transit Feed files
     out_files = write_gtf_text(database, destination, schema)

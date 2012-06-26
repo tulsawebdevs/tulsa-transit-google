@@ -11,11 +11,11 @@ def is_useful(full_path):
     return first_bits == key_string
 
 
-def read(full_path, database, verbose=False, same_stops=None):
+def read(full_path, database, verbose=False, fixups=None):
     '''Read a Stop Trips file'''
     text = open(full_path, 'rU').read()
     data = parse_trapeze_stop_trips(text)
-    store_stop_trips(data, database, verbose, same_stops)
+    store_stop_trips(data, database, verbose, fixups)
 
 
 def parse_trapeze_text(text):
@@ -119,8 +119,12 @@ def parse_trapeze_stop_trips(text):
     return d
 
 
-def store_stop_trips(stop_data, database, verbose=False, same_stops=None):
+def store_stop_trips(stop_data, database, verbose=False, fixups=None):
     '''Store stop trips data to the database'''
+    
+    same_stops = dict()
+    for ss in fixups.get('same_stops', []):
+        same_stops[ss["original_id"]] = ss["replacement_id"]
 
     cursor = database.cursor()
 

@@ -58,6 +58,15 @@ def nearest_node(graph, lat, lon):
     return node_candidates[0][1]
 
 
+def shortest_dist_to_points(lat, lon, line):
+    min_dist = 10000000000.0
+    for line_lat, line_lon in line:
+        dist = haversine(line_lon, line_lon, lat, lon)
+        if dist < min_dist:
+            min_dist = dist
+    return min_dist
+
+
 def read(full_path, database, verbose=False):
     '''Read a shapefile into the database'''
     name = os.path.split(full_path)[-1].lower()
@@ -114,6 +123,7 @@ def read_patterns(patterns_path, database, verbose=False):
         # Create line
         line = []
         first_nodes = None
+        min_add_dist = 0.140
         for seq, (node1, node2) in enumerate(parts):
             if first_nodes:
                 first_node1, first_node2 = first_nodes
@@ -126,15 +136,18 @@ def read_patterns(patterns_path, database, verbose=False):
                     (node_dist(first_node2, node1),
                      (first_node1, first_node2, node1, node2)),
                     (node_dist(first_node2, node2),
-                     (first_node2, first_node1, node2, node2))])
-                n1, n2, n3, n4 = node_orders[0][1]
+                     (first_node1, first_node2, node2, node1))])
+                dist, (n1, n2, n3, n4) = node_orders[0]
                 # Optimize for shared point in the two segements
                 if n2 == n3:
                     line.extend((n1, n2, n4))
+                elif node_dist(n2, n3) < min_add_dist:
+                    if verbose:
+                        print "Pattern %s:%s for line %s: Adding first segment (%0.5f, %0.5f) -> (%0.5f, %0.5f) (%0.1f meters)" % (pattern_id, pattern, linedir_id, n2[0], n2[1], n3[0], n3[1], 1000.0 * node_dist(n2, n3))
+                    line.extend((n1, n2, n3, n4))
                 else:
                     if verbose:
-                        print "Pattern %s:%s for line %s: Adding segment (%0.5f, %0.5f) -> (%0.5f, %0.5f) (%0.1f meters)" % (pattern_id, pattern, linedir_id, n2[0], n2[1], n3[0], n3[1], 1000.0 * node_dist(n2, n3))
-                    line.extend((n1, n2, n3, n4))
+                        print "Pattern %s:%s for line %s: Discarding first segment (%0.5f, %0.5f) -> (%0.5f, %0.5f) (%0.1f meters)" % (pattern_id, pattern, linedir_id, n2[0], n2[1], n3[0], n3[1], 1000.0 * node_dist(n2, n3))
                 first_nodes = None
             elif line:
                 last_node = line[-1]
@@ -148,10 +161,13 @@ def read_patterns(patterns_path, database, verbose=False):
                 # Optimize for tail point in the new segment
                 if n1 == n2:
                     line.append(n3)
-                else:
+                elif node_dist(n1, n2) < min_add_dist:
                     if verbose:
                         print "Pattern %s:%s for line %s: Adding segment (%0.5f, %0.5f) -> (%0.5f, %0.5f) (%0.1f meters)" % (pattern_id, pattern, linedir_id, n1[0], n1[1], n2[0], n2[1], 1000.0 * node_dist(n1, n2))
                     line.extend((n2, n3))
+                else:
+                    if verbose:
+                        print "Pattern %s:%s for line %s: Discarding segment (%0.5f, %0.5f) -> (%0.5f, %0.5f) (%0.1f meters)" % (pattern_id, pattern, linedir_id, n1[0], n1[1], n2[0], n2[1], 1000.0 * node_dist(n1, n2))
             else:
                 # Collect the first segment for later
                 first_nodes = (node1, node2)
@@ -160,7 +176,7 @@ def read_patterns(patterns_path, database, verbose=False):
         shape_id = "%s_%s" % (pattern_id, pattern)
         route_id = int(str(linedir_id)[:-1])
         direction = int(str(linedir_id)[-1])
-        active = False
+        active = 0
         shape_sql = (
             'INSERT INTO shapes'
             ' (shape_id, shape_pt_lat, shape_pt_lon, shape_pt_sequence,'
@@ -172,20 +188,65 @@ def read_patterns(patterns_path, database, verbose=False):
         trip_shapes[(route_id, direction)].append((shape_id, line))
     
     # Assign shapes to trips
-    for route_id, direction in trip_shapes.keys():
-        trips_sql = (
-            'SELECT trip_id from trips'
-            ' WHERE route_id=? AND direction_id=? AND shape_id IS NULL'
-            '   AND active=1;')
-        update_trip_sql = 'UPDATE trips SET shape_id=? WHERE trip_id=?;'
-        update_shapes_sql = 'UPDATE shapes SET active=1 WHERE shape_id=?;'
+    trip_shape_cache = dict()
+    stop_shape_cache = dict()
+    trips_sql = (
+        'SELECT trip_id from trips'
+        ' WHERE route_id=? AND direction_id=? AND shape_id IS NULL'
+        '   AND active=1;')
+    update_trip_sql = 'UPDATE trips SET shape_id=? WHERE trip_id=?;'
+    update_shapes_sql = 'UPDATE shapes SET active=1 WHERE shape_id=?;'
+    for (route_id, direction), shapes in trip_shapes.items():
         res = database.execute(trips_sql, (route_id, direction))
-        for r in res.fetchall():
-            trip_id = r[0]
-            # TODO: Pick best shape for each trip
-            shape_id = trip_shapes[(route_id, direction)][0][0]
-            database.execute(update_trip_sql, (shape_id, trip_id))
-            database.execute(update_shapes_sql, (shape_id,))
+        trip_ids = [r[0] for r in res.fetchall()]
+        for trip_id in trip_ids:
+            # Get the stops
+            stops_sql = (
+                'SELECT stop_times.stop_id, stop_times.stop_sequence,'
+                '    stops.stop_lat, stops.stop_lon'
+                ' FROM stop_times'
+                ' JOIN stops on stop_times.stop_id=stops.stop_id'
+                ' WHERE stop_times.active=1 AND stop_times.trip_id=?'
+                ' ORDER BY stop_times.stop_sequence;')
+            stops = database.execute(stops_sql, (trip_id,)).fetchall()
+            assert stops
+            
+            # Create the trip identifier
+            trip_shape_key = '-'.join([str(s[0]) for s in stops])
+            if trip_shape_key not in trip_shape_cache:
+                print "Trip %s has these stops: %s" % (trip_id, trip_shape_key)
+                trip_shape = []
+                dists = collections.defaultdict(float)
+                for stop, seq, lat, lon in stops:
+                    for shape_id, line in shapes:
+                        stop_shape_key = "%s-%s" % (stop, shape_id)
+                        if stop_shape_key not in stop_shape_cache:
+                            dist = shortest_dist_to_points(lat, lon, line)
+                            stop_shape_cache[stop_shape_key] = dist
+                        dists[shape_id] += stop_shape_cache[stop_shape_key]
+                min_dist = 1000000.0
+                min_shape_id = None
+                print "  distances %s" % dict(dists)
+                for shape_id, dist in dists.items():
+                    if dist < min_dist:
+                        min_dist = dist
+                        min_shape_id = shape_id
+                assert(min_shape_id)
+                trip_shape_cache[trip_shape_key] = min_shape_id
+            trip_shape_id = trip_shape_cache[trip_shape_key]
+            if verbose:
+                print ("Picked shape '%s' for trip '%s'" %
+                       (trip_shape_id, trip_id))
+            database.execute(update_trip_sql, (trip_shape_id, trip_id))
+            database.execute(update_shapes_sql, (trip_shape_id,))
+    
+    res = database.execute(
+        'SELECT DISTINCT shape_id FROM shapes WHERE active=0;')
+    unused_shapes = [r[0] for r in res.fetchall()]
+    if unused_shapes:
+        if verbose:
+            print ("Unused shapes: %s" % ', '.join(unused_shapes))
+
 
 def read_lines(lines_path, database, verbose=False):
     '''Read an lines shapefile into the database'''
