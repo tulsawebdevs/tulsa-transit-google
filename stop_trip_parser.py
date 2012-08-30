@@ -35,6 +35,7 @@ def parse_trapeze_stop_trips(text):
     dir_headers = None
     dir_trips = None
     dir_fields = None
+    start_col = 0
     d = dict(meta=dict(), dir=list())
     for linenum, line in enumerate(text.split('\n')):
         if in_header:
@@ -81,16 +82,21 @@ def parse_trapeze_stop_trips(text):
                     for h in zip(*headers):
                         minimized_headers.append(
                             [x for x in h if x])
+                    start_col = 0
                     assert(minimized_headers[0] == ['Pattern'])
-                    assert(minimized_headers[1] == ['INT'])
-                    assert(minimized_headers[2] == ['VAL'])
-                    final_headers = minimized_headers[3:]
+                    start_col += 1
+                    if minimized_headers[1] == ['INT']:
+                        start_col += 1
+                    if minimized_headers[2] == ['VAL']:
+                        start_col += 1
+                    final_headers = minimized_headers[start_col:]
                     d['dir'][-1]['headers'] = final_headers
                 else:
                     dir_headers.append(line)
             else:
+                assert(start_col != 0)
                 dir_trips.append(
-                    [line[s:e].strip() for s, e in dir_fields][3:])
+                    [line[s:e].strip() for s, e in dir_fields][start_col:])
         else:
             if linenum == 0:
                 assert(line == 'Stop Trips')
@@ -136,7 +142,20 @@ def store_stop_trips(stop_data, database, verbose=False, fixups=None):
     route_ids = dict([(str(k), v) for k, v in res])
 
     line_id = stop_data['meta']['Line']
-    route_id = route_ids[line_id]
+    try:
+        route_id = route_ids[line_id]
+    except KeyError:
+        candidates = [k for k in route_ids.keys() if k.startswith(line_id)]
+        if len(candidates) == 1:
+            route_id = route_ids[candidates[0]]
+            if verbose:
+                print ('No exact match for %s - using %s (line ID %s)' %
+                        (line_id, candidates[0], route_id))
+        else:
+            if verbose:
+                print ('No exact match for %s - found %s' %
+                        (line_id, candidates))
+            raise
     service_id = stop_data['meta']['Service']
     stop_times = list()
     complaints = set()
@@ -158,6 +177,7 @@ def store_stop_trips(stop_data, database, verbose=False, fixups=None):
             stop_ids.setdefault(key, []).append(stop_id)
             key = ('', seq)
             stop_ids.setdefault(key, []).append(stop_id)
+        assert stop_ids
         
         for t_num, t in enumerate(d['trips']):
             trip_id = "%s_%s_%d_%02d" % (route_id, service_id, dir_num, t_num)
