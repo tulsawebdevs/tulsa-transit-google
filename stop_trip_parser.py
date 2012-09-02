@@ -125,6 +125,30 @@ def parse_trapeze_stop_trips(text):
     return d
 
 
+class NoStopMatch(Exception):
+    pass
+
+
+def get_stop_ids(cursor, route_id, dir_num):
+    stop_ids = dict()
+    line_stops_sql = (
+        "SELECT stop_abbr, node_abbr, stop_id, sequence"
+        " FROM line_stops"
+        " WHERE line_no='%s' AND line_dir='%s';" % 
+        (route_id, dir_num))
+    for stop_abbr, node_abbr, stop_id, seq in (
+            cursor.execute(line_stops_sql)):
+        if node_abbr:
+            key = (node_abbr, seq)
+            stop_ids.setdefault(key, []).append(stop_id)
+        key = (stop_abbr, seq)
+        stop_ids.setdefault(key, []).append(stop_id)
+        key = ('', seq)
+        stop_ids.setdefault(key, []).append(stop_id)
+    assert stop_ids
+    return stop_ids
+
+
 def store_stop_trips(stop_data, database, verbose=False, fixups=None):
     '''Store stop trips data to the database'''
     
@@ -145,6 +169,11 @@ def store_stop_trips(stop_data, database, verbose=False, fixups=None):
     try:
         route_id = route_ids[line_id]
     except KeyError:
+        # TODO: Flex lines are giving me problems - need to rewrite
+        # Start with patterns rather than trips
+        print "Can't find a route for %s - skipping for now" % line_id
+        cursor.close()
+        return
         candidates = [k for k in route_ids.keys() if k.startswith(line_id)]
         if len(candidates) == 1:
             route_id = route_ids[candidates[0]]
@@ -156,29 +185,14 @@ def store_stop_trips(stop_data, database, verbose=False, fixups=None):
                 print ('No exact match for %s - found %s' %
                         (line_id, candidates))
             raise
+    
     service_id = stop_data['meta']['Service']
     stop_times = list()
     complaints = set()
     for dir_num, d in enumerate(stop_data['dir']):
         # Read all stop_ids
         # Again, not ideal, but easier to do this on first insert
-        line_stops_sql = (
-            "SELECT stop_abbr, node_abbr, stop_id, sequence"
-            " FROM line_stops"
-            " WHERE line_no='%s' AND line_dir='%s';" % 
-            (route_id, dir_num))
-        stop_ids = dict()
-        for stop_abbr, node_abbr, stop_id, seq in (
-                cursor.execute(line_stops_sql)):
-            if node_abbr:
-                key = (node_abbr, seq)
-                stop_ids.setdefault(key, []).append(stop_id)
-            key = (stop_abbr, seq)
-            stop_ids.setdefault(key, []).append(stop_id)
-            key = ('', seq)
-            stop_ids.setdefault(key, []).append(stop_id)
-        assert stop_ids
-        
+        stop_ids = get_stop_ids(cursor, route_id, dir_num)        
         for t_num, t in enumerate(d['trips']):
             trip_id = "%s_%s_%d_%02d" % (route_id, service_id, dir_num, t_num)
             last_time = None
@@ -193,7 +207,7 @@ def store_stop_trips(stop_data, database, verbose=False, fixups=None):
 
                 # Our best guess:
                 # If stop abbr is included, trapeze uses '+' for approximate
-                # If stop_abbr is empty, then is is approximate
+                # If stop_abbr is empty, then is is approximate (?)
                 # Omit approximate times (Google will estimate) unless it's
                 #  the first or last stop in a trip
                 first_stop = (s_num == 0)
@@ -205,8 +219,30 @@ def store_stop_trips(stop_data, database, verbose=False, fixups=None):
                     hour, minute = [int(x) for x in raw_time.split(':')]
                     gtime = "%02d:%02d:00" % (hour, minute)
 
-                stop_id, complaint = pick_stop_id(stop_ids, stop_abbrs,
-                    route_id, dir_num, s_num + 1)
+                try:
+                    stop_id, complaint = pick_stop_id(stop_ids, stop_abbrs,
+                        route_id, dir_num, s_num + 1)
+                except NoStopMatch:
+                    # Look for stop on a different line
+                    if verbose:
+                        print ("Looking for stops %s, seq %s on a different line..." % (stop_abbrs, s_num+1))
+                    sql = ("SELECT stop_id, line_no, line_dir"
+                           " FROM line_stops"
+                           " WHERE stop_abbr in ('%s') AND sequence='%s';" % 
+                           ("','".join(stop_abbrs), s_num+1))
+                    other_lines = []
+                    for new_stop_id, new_route_id, new_line_dir in cursor.execute(sql):
+                        other_lines.append((stop_id, line_dir))
+                    if len(other_lines) == 1:
+                        if verbose:
+                            print ("Found on line %s dir %s" % new_route_id, new_line_dir)
+                        new_stop_ids = get_stop_ids(cursor, new_route_id, new_line_dir)
+                        for key, values in new_stop_ids.items():
+                            stop_ids.setdefault(key, []).extend(values)
+                    else:
+                        if verbose:
+                            print ("Didn't find any :(")
+                        raise
                 if stop_id in same_stops:
                     stop_id = same_stops[stop_id]
                 if complaint:
@@ -255,7 +291,7 @@ def pick_stop_id(stop_ids, stop_abbrs, route_id, dir_num, seq_num):
         candidates.update(stop_ids.get(key, []))
 
     if len(candidates) == 0:
-        raise Exception('No stop ID candidates for stop_abbrs ' +
+        raise NoStopMatch('No stop ID candidates for stop_abbrs ' +
             ','.join(stop_abbrs))
     if len(candidates) > 1:
         complaint = 'For stop_abbr %s, multiple stop candidates %s' % (
