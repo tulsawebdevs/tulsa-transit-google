@@ -136,7 +136,8 @@ INSTALLED_APPS = [
     'django.contrib.admin',
     'ttg',
     'south',
-    'multigtfs'
+    'multigtfs',
+    'mtta',
 ]
 
 try:
