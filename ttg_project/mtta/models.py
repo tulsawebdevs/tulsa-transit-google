@@ -75,7 +75,7 @@ class Line(models.Model):
     def import_dbf(cls, signup, path):
         logger.info('Parsing Lines from %s...' % path)
         db_f = dbfpy.dbf.Dbf(path, readOnly=True)
-        line_cnt, line_dir_cnt = 0, 0
+        line_cnt, linedir_cnt = 0, 0
         for record in db_f:
             line_id = record['LineID']
             line_abbr = record['LineAbbr']
@@ -98,9 +98,9 @@ class Line(models.Model):
                 LineDirection.objects.create(
                     line=line, linedir_id=linedir_id1,
                     name=record['TPFIELD321'])
-                line_dir_cnt += 1
+                linedir_cnt += 1
         logger.info(
-            'Parsed %d Lines, %s LineDirections.' % (line_cnt, line_dir_cnt))
+            'Parsed %d Lines, %s LineDirections.' % (line_cnt, linedir_cnt))
 
 
 class LineDirection(models.Model):
@@ -235,7 +235,10 @@ class Node(models.Model):
     stop = models.ForeignKey(Stop, related_name='nodes')
     node_id = models.IntegerField(db_index=True)
     abbr = models.CharField(max_length=8)
-    name = models.CharField(max_length=20)
+    name = models.CharField(max_length=50)
+
+    def __unicode__(self):
+        return "%s - %s - %s" % (self.stop, self.node_id, self.abbr)
 
     class Meta:
         unique_together = ('stop', 'node_id')
@@ -245,9 +248,15 @@ class StopByLine(models.Model):
     stop = models.ForeignKey(Stop)
     linedir = models.ForeignKey(LineDirection)
     seq = models.IntegerField()
+    node = models.ForeignKey(Node, null=True, blank=True)
 
     class Meta:
         unique_together = ('stop', 'linedir', 'seq')
+        ordering = ('linedir', 'seq')
+        verbose_name_plural = "stops by line"
+    
+    def __unicode__(self):
+        return '%s - %s - %s' % (self.linedir, self.seq, self.stop)
 
     @classmethod
     def import_dbf(cls, signup, path):
@@ -288,12 +297,12 @@ class StopByLine(models.Model):
                     new_node_cnt += 1
             else:
                 stop_cnt += 1
-            
+                node = None
 
-            cls.objects.create(stop=stop, linedir=linedir, seq=seq)
+            cls.objects.create(stop=stop, linedir=linedir, seq=seq, node=node)
             sxl_cnt += 1
         logger.info(
-            'Parsed %d Stops->Line: %d nodes (%d new), %d stops.' % (
+            'Parsed %d Stops->Line: %d nodes (%d unique), %d stops.' % (
                 sxl_cnt, node_cnt, new_node_cnt, stop_cnt))
 
 
@@ -302,9 +311,15 @@ class StopByPattern(models.Model):
     linedir = models.ForeignKey(LineDirection)
     pattern = models.ForeignKey(Pattern)
     seq = models.IntegerField()
+    node = models.ForeignKey(Node, null=True, blank=True)
     
     class Meta:
         unique_together = ('stop', 'linedir', 'pattern', 'seq')
+        ordering = ('pattern', 'seq',)
+        verbose_name_plural = "stops by pattern"
+
+    def __unicode__(self):
+        return '%s -  %s - %s' % (self.pattern, self.seq, self.stop)
 
     @classmethod
     def import_dbf(cls, signup, path):
@@ -351,14 +366,12 @@ class StopByPattern(models.Model):
                     new_node_cnt += 1
             else:
                 stop_cnt += 1
+                node = None
 
             cls.objects.create(
-                stop=stop, linedir=linedir, pattern=pattern, seq=seq)
+                stop=stop, linedir=linedir, pattern=pattern, seq=seq,
+                node=node)
             sxl_cnt += 1
-            if stop_type == 'N':
-                node_cnt += 1
-            else:
-                stop_cnt += 1
         logger.info(
         'Parsed %d Stops->Line: %d nodes (%d new), %d stops.' % (
             sxl_cnt, node_cnt, new_node_cnt, stop_cnt))
