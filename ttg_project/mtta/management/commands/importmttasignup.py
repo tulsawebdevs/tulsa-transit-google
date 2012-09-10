@@ -21,7 +21,7 @@ class Command(BaseCommand):
         if len(args) > 1:
             raise CommandError('You can only import one signup at a time.')
         input_folder = args[0]
-        name = options.get('name') or 'Imported at %s' % datetime.now()
+        name = options.get('name') or SignUp._unset_name
         verbosity = int(options.get('verbosity', 1))
         if verbosity == 0:
             level = logging.WARNING
@@ -36,4 +36,7 @@ class Command(BaseCommand):
         logger.setLevel(level)
         signup = SignUp.objects.create(name=name)
         signup.import_folder(input_folder)
+        if signup.name == SignUp._unset_name:
+            signup.name = 'Imported at %s' % datetime.now()
+            signup.save()
         self.stdout.write("Successfully imported SignUpFeed %s\n" % (signup))

@@ -9,9 +9,14 @@ import shapefile
 logger = logging.getLogger(__name__)
 
 
+def mockable_open(path):
+    return open(path)
+
+
 class SignUp(models.Model):
     name = models.CharField(max_length=255)
     created = models.DateTimeField(auto_now_add=True)
+    _unset_name = '<unset>'
 
     def import_folder(self, folder, stdout=None):
         data_file = dict()
@@ -47,9 +52,9 @@ class SignUp(models.Model):
         Pattern.import_shp(self, data_file['patterns.shp'])
         Stop.import_dbf(self, data_file['stops.dbf'])
         StopByLine.import_dbf(self, data_file['stopsbyline.dbf'])
-        StopByPattern.import_dbf(self, data_file['stopsbypattern.dbf'])
+        #StopByPattern.import_dbf(self, data_file['stopsbypattern.dbf'])
         for path in stop_trips:
-            Trip.import_schedule(self, path)
+            TripDay.import_schedule(self, path)
 
     def __unicode__(self):
         return "%s - %s" % (self.id, self.name or '(No Name)')
@@ -63,7 +68,7 @@ class Line(models.Model):
     line_name = models.CharField(max_length=30)
     line_color = models.IntegerField()
     line_type = models.CharField(max_length=2)
-    
+
     class Meta:
         unique_together = ('signup', 'line_id')
 
@@ -90,7 +95,7 @@ class Line(models.Model):
             linedir_id0 = record['LineDirId0']
             if linedir_id0:
                 LineDirection.objects.create(
-                    line=line, linedir_id=linedir_id0, 
+                    line=line, linedir_id=linedir_id0,
                     name=record['TPFIELD320'])
                 linedir_cnt +=1
             linedir_id1 = record['LineDirId1']
@@ -108,7 +113,7 @@ class LineDirection(models.Model):
     linedir_id = models.IntegerField(db_index=True)
     line = models.ForeignKey(Line)
     name = models.CharField(max_length=20)
-    
+
     class Meta:
         unique_together = ('linedir_id', 'line')
 
@@ -124,7 +129,7 @@ class Pattern(models.Model):
     linedir = models.ForeignKey(LineDirection)
     raw_pattern = JSONField(default=[])
     fixed_pattern = JSONField(blank=True, default=[])
-    
+
     class Meta:
         unique_together = ('linedir', 'pattern_id')
 
@@ -228,7 +233,7 @@ class Stop(models.Model):
 
 class Node(models.Model):
     '''A node inferred from StopsByLine or StopsByPattern
-    
+
     We don't have a direct database of nodes, but some stops are identified as
     nodes in the StopsBy* data.
     '''
@@ -242,7 +247,7 @@ class Node(models.Model):
 
     class Meta:
         unique_together = ('stop', 'node_id')
-    
+
 
 class StopByLine(models.Model):
     stop = models.ForeignKey(Stop)
@@ -254,7 +259,7 @@ class StopByLine(models.Model):
         unique_together = ('stop', 'linedir', 'seq')
         ordering = ('linedir', 'seq')
         verbose_name_plural = "stops by line"
-    
+
     def __unicode__(self):
         return '%s - %s - %s' % (self.linedir, self.seq, self.stop)
 
@@ -312,7 +317,7 @@ class StopByPattern(models.Model):
     pattern = models.ForeignKey(Pattern)
     seq = models.IntegerField()
     node = models.ForeignKey(Node, null=True, blank=True)
-    
+
     class Meta:
         unique_together = ('stop', 'linedir', 'pattern', 'seq')
         ordering = ('pattern', 'seq',)
@@ -345,7 +350,7 @@ class StopByPattern(models.Model):
             linedirid = record['LineDirID']
             linedir = LineDirection.objects.get(
                 line__signup=signup, linedir_id=linedirid)
-                
+
             pattern_id = record['PatternID']
             pattern_name = record['Pattern']
             pattern = Pattern.objects.get(
@@ -373,28 +378,234 @@ class StopByPattern(models.Model):
                 node=node)
             sxl_cnt += 1
         logger.info(
-        'Parsed %d Stops->Line: %d nodes (%d new), %d stops.' % (
-            sxl_cnt, node_cnt, new_node_cnt, stop_cnt))
+            'Parsed %d Stops->Pattern: %d nodes (%d new), %d stops.' % (
+                sxl_cnt, node_cnt, new_node_cnt, stop_cnt))
 
 
 class Service(models.Model):
     signup = models.ForeignKey(SignUp)
     service_id = models.IntegerField()
 
+    class Meta:
+        unique_together = ordering = ('signup', 'service_id')
 
-class Trip(models.Model):
+
+class TripDay(models.Model):
+    '''A set of trips for a line direction by service day'''
     linedir = models.ForeignKey(LineDirection)
     service = models.ForeignKey(Service)
-    seq = models.IntegerField()
-    pattern = models.ForeignKey(Pattern)
+
+    class Meta:
+        unique_together = ordering = ('linedir', 'service')
 
     @classmethod
     def import_schedule(cls, signup, path):
         logger.info('Parsing Trips from %s...' % path)
 
+        in_intro = 0  # Make sure we're in a Stop Trips file
+        in_meta = 1   # Get Line and Service, fix SignUp name
+        in_dir = 2    # Get / switch the LineDirection
+        in_cols = 3   # Get the TripStops
+        in_data = 4   # Get the Trip and TripTimes
+        phase = in_intro
 
-class StopTrip(models.Model):
-    trip = models.ForeignKey(Trip)
-    stop = models.ForeignKey(Stop)
+        linedir = None
+        meta = dict()
+
+        tripday_cnt, tripstop_cnt, trip_cnt, triptimes_cnt = 0, 0, 0, 0
+        for linenum, linein in enumerate(mockable_open(path).readlines()):
+            linein = linein.rstrip()
+            if phase == in_intro:
+                # Make sure we're in a Stop Trips file
+                if linenum == 0:
+                    assert(linein == 'Stop Trips')
+                elif linenum == 1:
+                    assert(linein == '~~~~~~~~~~')
+                elif linenum == 2:
+                    assert(linein == '')
+                    phase = in_meta
+                else:
+                    raise ValueError(
+                        'Got lost in intro phase at line %d:\n.%s' %
+                        (linenum, linein))
+            elif phase == in_meta:
+                # Get Line and Service, fix SignUp name
+                if ':' in linein:
+                    name, val = linein.split(':', 1)
+                    meta[name] = val.strip()
+                elif linein == '':
+                    signup_name = meta['SignUp']
+                    service_id = meta['Service']
+                    line_name = meta['Line']
+                    if signup.name == SignUp._unset_name:
+                        signup.name = signup_name
+                        signup.save()
+                    service, created = Service.objects.get_or_create(
+                        signup=signup, service_id=service_id)
+                    possible_names = (
+                        line_name, line_name + 'FLEX', line_name + 'FLX')
+                    line = signup.line_set.get(line_abbr__in=possible_names)
+                    phase = in_dir
+            elif phase == in_dir:
+                # Get / switch the LineDirection
+                if linein.startswith('Direction:'):
+                    name, raw_val = linein.split(':', 1)
+                    val = raw_val.strip()
+                    linedir = line.linedirection_set.get(name=val)
+                    tripday = cls.objects.create(
+                        linedir=linedir, service=service)
+                    tripday_cnt += 1
+                    phase = in_cols
+                    col_lines = []
+                elif linein == '':
+                    continue
+                else:
+                    raise ValueError(
+                        'Got lost in dir phase at line %d:\n%s' %
+                        (linenum, linein))
+            elif phase == in_cols:
+                # Get the TripStops
+                # Format is something like:
+                #   Pattern  Node
+                #            Stop
+                #   ~~~~~~~ ~~~~~
+                # So, we don't know until the ~~~ what the columns are.
+                if linein == '':
+                    continue
+                elif not linein.startswith('~'):
+                    col_lines.append(linein)
+                else:
+                    assert len(col_lines) in (1, 2)
+                    # Determine the columns
+                    field_bounds = list()
+                    start = 0
+                    last_char = '~'
+                    for column, char in enumerate(linein):
+                        if char != last_char:
+                            if char == ' ':
+                                field_bounds.append((start, column))
+                            elif char == '~':
+                                start = column
+                            last_char = char
+                    last_start, last_column = field_bounds[-1]
+                    if last_start != start:
+                        field_bounds.append((start, column+1))
+                    # Get the column titles
+                    columns = list()
+                    for start, end in field_bounds:
+                        col1 = col_lines[0][start:end].strip()
+                        if len(col_lines) == 2:
+                            col2 = col_lines[1][start:end].strip()
+                        else:
+                            col2 = None
+                        columns.append((col1, col2))
+                    # First column should be 'Pattern'
+                    assert columns[0][0] == 'Pattern'
+                    pattern_bounds = field_bounds[0]
+                    # There may be two unused columns 'INT' and 'VAL'
+                    data_col = 1
+                    while True:
+                        if (columns[data_col][0] in ('INT', 'VAL') or
+                            columns[data_col][1] in ('INT', 'VAL')):
+                            data_col += 1
+                        else:
+                            break
+                    assert data_col == 1 or data_col == 3
+                    data_bounds = field_bounds[data_col:]
+                    # The rest are node/stop columns, but we need to match
+                    #  them to data.  First, let's test if StopsByLine is
+                    #  accurate
+                    stops_by_line_matches = True
+                    for seq, abbrs in enumerate(columns[data_col:]):
+                        node_abbr, stop_abbr = abbrs
+                        sbl = linedir.stopbyline_set.get(seq=seq+1)
+                        if node_abbr:
+                            node = sbl.node
+                            if not node or node_abbr != node.abbr:
+                                stops_by_line_matches = False
+                                break
+                        if stop_abbr:
+                            stop = sbl.stop
+                            if not stop or stop_abbr != stop.stop_abbr:
+                                stops_by_line_matches = False
+                                break
+                    if stops_by_line_matches:
+                        # This is the best way to match times to stops
+                        tripstops = []
+                        sbls = linedir.stopbyline_set.order_by('seq')
+                        for seq, sbl in enumerate(sbls):
+                            tripstops.append(TripStop.objects.create(
+                                tripday=tripday, stop=sbl.stop, node=sbl.node,
+                                seq=seq))
+                            tripstop_cnt += 1
+                    else:
+                        logger.warning('TripDay does not match StopsByLine')
+                        return
+                    phase = in_data
+                    found_trip = False
+                    trip_seq = 0
+            elif phase == in_data:
+                if linein == '':
+                    if trip_seq > 0:
+                        # Get ready for next set of data
+                        phase = in_dir
+                        del linedir
+                        del tripday
+                        del tripstops
+                        del field_bounds
+                        del trip_seq
+                    else:
+                        continue
+                elif linein.startswith('Direction:'):
+                    raise ValueError(
+                        'Got lost in data phase at line %d:\n%s' %
+                        (linenum, linein))
+                else:
+                    # Parse Trip
+                    raw_pat = linein[pattern_bounds[0]:pattern_bounds[1]]
+                    pattern_name= raw_pat.strip()
+                    pattern = linedir.pattern_set.get(name=pattern_name)
+                    trip = Trip.objects.create(
+                        tripday=tripday, pattern=pattern, seq=trip_seq)
+                    trip_seq += 1
+                    trip_cnt += 1
+                    # Parse TripTime
+                    for time_seq, (start, end) in enumerate(data_bounds):
+                        time = linein[start:end].strip()
+                        if time:
+                            tripstop = tripstops[time_seq]
+                            TripTime.objects.create(
+                                trip=trip, tripstop=tripstop, time=time)
+                            triptimes_cnt += 1
+        logger.info(
+            'Parsed %d times for %d trips, %d stops, and %d line directions.'
+                % (triptimes_cnt, trip_cnt, tripstop_cnt, tripday_cnt))
+
+class TripStop(models.Model):
+    '''A stop on a TripDay'''
+    tripday = models.ForeignKey(TripDay)
+    stop = models.ForeignKey(Stop, null=True, blank=True)
+    node = models.ForeignKey(Node, null=True, blank=True)
     seq = models.IntegerField()
-    time = models.CharField(max_length=5, blank=True)
+
+    class Meta:
+        unique_together = ordering = ('tripday', 'seq')
+
+
+class Trip(models.Model):
+    '''A bus trip on a TripDay'''
+    tripday = models.ForeignKey(TripDay)
+    pattern = models.ForeignKey(Pattern)
+    seq = models.IntegerField()
+
+    class Meta:
+        unique_together = ordering = ('tripday', 'pattern', 'seq')
+
+class TripTime(models.Model):
+    '''A stop time for a Trip'''
+    trip = models.ForeignKey(Trip)
+    tripstop = models.ForeignKey(TripStop)
+    time = models.CharField(max_length=5)
+
+    class Meta:
+        unique_together = ordering = ('trip', 'tripstop')

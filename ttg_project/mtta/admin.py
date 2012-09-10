@@ -1,8 +1,8 @@
 from django.contrib import admin
 
 from mtta.models import (
-    Line, LineDirection, Node, Pattern, Service, SignUp, Stop,
-    StopByLine, StopByPattern, StopTrip, Trip)
+    SignUp, Line, LineDirection, Pattern, Stop, Node, StopByLine,
+    StopByPattern, Service, TripDay, TripStop, Trip, TripTime)
 
 
 class LineAdmin(admin.ModelAdmin):
@@ -42,5 +42,7 @@ admin.site.register(SignUp)
 admin.site.register(Stop, StopAdmin)
 admin.site.register(StopByLine, StopByLineAdmin)
 admin.site.register(StopByPattern, StopByPatternAdmin)
-admin.site.register(StopTrip)
+admin.site.register(TripDay)
+admin.site.register(TripStop)
 admin.site.register(Trip)
+admin.site.register(TripTime)

@@ -13,6 +13,7 @@ wsgiref==0.1.2
 transitfeed==1.2.12
 pyshp==1.1.4
 networkx==1.6
+mox==0.5.3
 
 # Work in progress
 git+git://github.com/tulsawebdevs/django-multi-gtfs.git#egg=multigtfs
