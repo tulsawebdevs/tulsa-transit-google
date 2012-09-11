@@ -133,8 +133,62 @@ Pattern      123Ar            Adm/MemE
         self.assertEqual(ts0.stop, self.stop1)
         self.assertEqual(ts0.node, None)
 
+    def test_import_schedule_sbl_is_just_nodes_two_candidates(self):
+        '''
+        The import succeeds if the StopByLine is just nodes
+        
+        In Aug 2012 signup, 508 was just nodes, but stops were on 902
+        '''
+        self.sbl2.delete()
+        self.sbl3.seq = 2
+        self.sbl3.save()
+        stop4 = Stop.objects.create(
+            signup=self.signup, stop_id=self.stop2.stop_id + 1,
+            stop_abbr=self.stop2.stop_abbr, site_name=self.stop2.site_name,
+            lon=self.stop2.lon, lat=self.stop2.lat,
+            stop_name=self.stop2.stop_name)
+        
+        mtta.models.mockable_open(
+            'test.txt').AndReturn(StringIO.StringIO(self.schedule))
+        self.mox.ReplayAll()
+        TripDay.import_schedule(self.signup, 'test.txt')
+        self.mox.VerifyAll()
+        self.assert_expected_trip_object_counts()
+        ts1 = TripStop.objects.get(seq=1)
+        self.assertEqual(ts1.stop, self.stop2)
+        
+    def test_import_schedule_sbl_is_just_nodes_two_candidates_other(self):
+        '''
+        The import succeeds if the StopByLine is just nodes
+
+        In Aug 2012 signup, 508 was just nodes, but stops were on 902
+        '''
+        self.sbl2.delete()
+        self.sbl3.seq = 2
+        self.sbl3.save()
+        self.line100dir0.linedir_id += 1
+        self.line100dir0.save()
+        stop4 = Stop.objects.create(
+            signup=self.signup, stop_id=self.stop2.stop_id + 1,
+            stop_abbr=self.stop2.stop_abbr, site_name=self.stop2.site_name,
+            lon=self.stop2.lon, lat=self.stop2.lat,
+            stop_name=self.stop2.stop_name)
+
+        mtta.models.mockable_open(
+            'test.txt').AndReturn(StringIO.StringIO(self.schedule))
+        self.mox.ReplayAll()
+        TripDay.import_schedule(self.signup, 'test.txt')
+        self.mox.VerifyAll()
+        self.assert_expected_trip_object_counts()
+        ts1 = TripStop.objects.get(seq=1)
+        self.assertEqual(ts1.stop, stop4)
+
     def test_import_schedule_sbl_is_just_nodes(self):
-        '''The import succeeds if the StopByLine is just nodes'''
+        '''
+        The import succeeds if the StopByLine is just nodes
+        
+        In Aug 2012 signup, 508 was just nodes, but some stops were unique
+        '''
         self.sbl2.delete()
         self.sbl3.seq = 2
         self.sbl3.save()
@@ -144,9 +198,18 @@ Pattern      123Ar            Adm/MemE
         TripDay.import_schedule(self.signup, 'test.txt')
         self.mox.VerifyAll()
         self.assert_expected_trip_object_counts()
-        ts1 = TripStop.objects.get(seq=1)
+        tripday = TripDay.objects.get()
+        ts0, ts1, ts2 = TripStop.objects.all()
+        self.assertEqual(ts0.stop, self.stop1)
+        self.assertEqual(ts0.node, self.node1)
+        self.assertEqual(ts1.seq, 1)
+        self.assertEqual(ts1.tripday, tripday)
         self.assertEqual(ts1.stop, self.stop2)
         self.assertEqual(ts1.node, None)
+        self.assertEqual(ts2.tripday, tripday)
+        self.assertEqual(ts2.seq, 2)
+        self.assertEqual(ts2.stop, self.stop3)
+        self.assertEqual(ts2.node, self.node3)
 
     def test_import_schedule_flex(self):
         '''Schedule NNN matches NNNFLEX, like 508 -> 508FLEX'''

@@ -389,7 +389,7 @@ class Service(models.Model):
 
     class Meta:
         unique_together = ordering = ('signup', 'service_id')
-    
+
     def __unicode__(self):
         return '%s - %s' % (self.signup.id, self.get_service_id_display())
 
@@ -401,7 +401,7 @@ class TripDay(models.Model):
 
     class Meta:
         unique_together = ordering = ('linedir', 'service')
-    
+
     def __unicode__(self):
         return '%s - %s' % (self.linedir, self.service)
 
@@ -535,7 +535,7 @@ class TripStop(models.Model):
 
     class Meta:
         unique_together = ordering = ('tripday', 'seq')
-    
+
     def __unicode__(self):
         return "%s - %s" % (self.tripday, self.seq)
 
@@ -615,10 +615,12 @@ class TripStop(models.Model):
                 tripstops.append(TripStop.objects.create(
                     tripday=tripday, stop=sbl.stop, node=sbl.node, seq=seq))
             return pattern_bounds, data_bounds, tripstops
-        
+
         # Another possibility is that StopsByLine is just the nodes.
-        #  If this is the case, then look for stops by abbreviation
-        logger.info('Trying nodes-by-line strategy...')
+        #  If this is the case, then guess at stops
+        logger.info('Trying stops-by-similar-line strategy...')
+
+        # Test the abbreviations against the candidates
         nodes_by_line_matches = True
         node_seq = 1
         tripstop_params = []
@@ -646,15 +648,29 @@ class TripStop(models.Model):
                 tripstop_params.append(dict(stop=sbl.stop, node=sbl.node))
                 node_seq += 1
             else:
-                # Look for stop in stops table
-                stops = signup.stop_set.filter(stop_abbr=stop_abbr)
+                # Look for stops in the SignUp with the same ID
+                stops = signup.stop_set.filter(
+                    stop_abbr=stop_abbr).order_by('stop_id')
                 if len(stops) == 1:
-                    tripstop_params.append(dict(stop=stops[0]))
+                    stop = stops[0]
+                elif len(stops) == 2:
+                    if linedir.linedir_id % 2 == 0:
+                        stop = stops[0]
+                    else:
+                        stop = stops[1]
+                    logger.info(
+                        'At seq %s, abbrs %s, 2 stops found (%s, %s),'
+                        'guessing %s for linedir %s' %
+                        (seq, abbrs, stops[0].stop_id, stops[1].stop_id,
+                         stop, linedir.linedir_id))
                 else:
-                    nodes_by_line_matches = False
                     logger.info(
                         'At seq %s, abbrs %s, %d stops found for %s' %
                         (seq, abbrs, len(stops), stop_abbr))
+                if stop:
+                    tripstop_params.append(dict(stop=stop))
+                else:
+                    nodes_by_line_matches = False
                     break
         if nodes_by_line_matches:
             tripstops = []
@@ -675,7 +691,7 @@ class Trip(models.Model):
 
     class Meta:
         unique_together = ordering = ('tripday', 'seq', 'pattern')
-    
+
     def __unicode__(self):
         return "%s - %s" % (self.tripday, self.seq)
 
@@ -684,7 +700,7 @@ class TripTime(models.Model):
     trip = models.ForeignKey(Trip)
     tripstop = models.ForeignKey(TripStop)
     time = models.CharField(max_length=5)
-    
+
     def __unicode__(self):
         return "%s - %s" % (self.tripstop, self.time)
 
