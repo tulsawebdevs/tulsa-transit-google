@@ -52,7 +52,7 @@ class SignUp(models.Model):
         Pattern.import_shp(self, data_file['patterns.shp'])
         Stop.import_dbf(self, data_file['stops.dbf'])
         StopByLine.import_dbf(self, data_file['stopsbyline.dbf'])
-        #StopByPattern.import_dbf(self, data_file['stopsbypattern.dbf'])
+        StopByPattern.import_dbf(self, data_file['stopsbypattern.dbf'])
         for path in stop_trips:
             TripDay.import_schedule(self, path)
 
@@ -464,83 +464,26 @@ class TripDay(models.Model):
                         'Got lost in dir phase at line %d:\n%s' %
                         (linenum, linein))
             elif phase == in_cols:
-                # Get the TripStops
+                # Accumulate the header, then parse TripStops
                 # Format is something like:
                 #   Pattern  Node
                 #            Stop
                 #   ~~~~~~~ ~~~~~
-                # So, we don't know until the ~~~ what the columns are.
                 if linein == '':
                     continue
                 elif not linein.startswith('~'):
                     col_lines.append(linein)
                 else:
                     assert len(col_lines) in (1, 2)
-                    # Determine the columns
-                    field_bounds = list()
-                    start = 0
-                    last_char = '~'
-                    for column, char in enumerate(linein):
-                        if char != last_char:
-                            if char == ' ':
-                                field_bounds.append((start, column))
-                            elif char == '~':
-                                start = column
-                            last_char = char
-                    last_start, last_column = field_bounds[-1]
-                    if last_start != start:
-                        field_bounds.append((start, column+1))
-                    # Get the column titles
-                    columns = list()
-                    for start, end in field_bounds:
-                        col1 = col_lines[0][start:end].strip()
-                        if len(col_lines) == 2:
-                            col2 = col_lines[1][start:end].strip()
-                        else:
-                            col2 = None
-                        columns.append((col1, col2))
-                    # First column should be 'Pattern'
-                    assert columns[0][0] == 'Pattern'
-                    pattern_bounds = field_bounds[0]
-                    # There may be two unused columns 'INT' and 'VAL'
-                    data_col = 1
-                    while True:
-                        if (columns[data_col][0] in ('INT', 'VAL') or
-                            columns[data_col][1] in ('INT', 'VAL')):
-                            data_col += 1
-                        else:
-                            break
-                    assert data_col == 1 or data_col == 3
-                    data_bounds = field_bounds[data_col:]
-                    # The rest are node/stop columns, but we need to match
-                    #  them to data.  First, let's test if StopsByLine is
-                    #  accurate
-                    stops_by_line_matches = True
-                    for seq, abbrs in enumerate(columns[data_col:]):
-                        node_abbr, stop_abbr = abbrs
-                        sbl = linedir.stopbyline_set.get(seq=seq+1)
-                        if node_abbr:
-                            node = sbl.node
-                            if not node or node_abbr != node.abbr:
-                                stops_by_line_matches = False
-                                break
-                        if stop_abbr:
-                            stop = sbl.stop
-                            if not stop or stop_abbr != stop.stop_abbr:
-                                stops_by_line_matches = False
-                                break
-                    if stops_by_line_matches:
-                        # This is the best way to match times to stops
-                        tripstops = []
-                        sbls = linedir.stopbyline_set.order_by('seq')
-                        for seq, sbl in enumerate(sbls):
-                            tripstops.append(TripStop.objects.create(
-                                tripday=tripday, stop=sbl.stop, node=sbl.node,
-                                seq=seq))
-                            tripstop_cnt += 1
-                    else:
-                        logger.warning('TripDay does not match StopsByLine')
+                    col_lines.append(linein)
+                    parsed = TripStop.parse_schedule_for_tripstops(
+                        tripday, col_lines)
+                    if not parsed:
+                        # Parse errors, abandon
                         return
+                    else:
+                        pattern_bounds, data_bounds, tripstops = parsed
+                    tripstop_cnt += len(tripstops)
                     phase = in_data
                     found_trip = False
                     trip_seq = 0
@@ -549,11 +492,6 @@ class TripDay(models.Model):
                     if trip_seq > 0:
                         # Get ready for next set of data
                         phase = in_dir
-                        del linedir
-                        del tripday
-                        del tripstops
-                        del field_bounds
-                        del trip_seq
                     else:
                         continue
                 elif linein.startswith('Direction:'):
@@ -591,6 +529,132 @@ class TripStop(models.Model):
     class Meta:
         unique_together = ordering = ('tripday', 'seq')
 
+    @classmethod
+    def parse_schedule_for_tripstops(cls, tripday, col_lines):
+        assert len(col_lines) == 2 or len(col_lines) == 3
+        assert set(col_lines[-1]) == set(' ~'),\
+            'Last col_line must be schedule column designator'
+        linedir = tripday.linedir
+        signup = linedir.line.signup
+
+        # Determine the columns
+        field_bounds = list()
+        start = 0
+        last_char = '~'
+        for column, char in enumerate(col_lines[-1]):
+            if char != last_char:
+                if char == ' ':
+                    field_bounds.append((start, column))
+                elif char == '~':
+                    start = column
+                last_char = char
+        last_start, last_column = field_bounds[-1]
+        if last_start != start:
+            field_bounds.append((start, column+1))
+        # Get the column titles
+        columns = list()
+        for start, end in field_bounds:
+            col1 = col_lines[0][start:end].strip()
+            if len(col_lines) == 3:
+                col2 = col_lines[1][start:end].strip()
+            else:
+                col2 = None
+            columns.append((col1, col2))
+        # First column should be 'Pattern'
+        assert columns[0][0] == 'Pattern'
+        pattern_bounds = field_bounds[0]
+        # There may be two unused columns 'INT' and 'VAL'
+        data_col = 1
+        while True:
+            if (columns[data_col][0] in ('INT', 'VAL') or
+                    columns[data_col][1] in ('INT', 'VAL')):
+                data_col += 1
+            else:
+                break
+        assert data_col == 1 or data_col == 3
+        data_bounds = field_bounds[data_col:]
+        # The rest are node/stop columns, but we need to match
+        #  them to data.  First, let's test if StopsByLine is
+        #  accurate
+        stops_by_line_matches = True
+        for seq, abbrs in enumerate(columns[data_col:]):
+            node_abbr, stop_abbr = abbrs
+            sbl = linedir.stopbyline_set.get(seq=seq+1)
+            node = sbl.node
+            stop = sbl.stop
+            if node_abbr:
+                if ((not node or node_abbr != node.abbr) and
+                        (not stop or node_abbr != stop.node_abbr)):
+                    stops_by_line_matches = False
+                    logger.info(
+                        'At seq %s, abbrs %s, node %s did not match' %
+                        (seq, abbrs, sbl.node))
+                    break
+            if stop_abbr:
+                if not stop or stop_abbr != stop.stop_abbr:
+                    stops_by_line_matches = False
+                    logger.info(
+                        'At seq %s, abbrs %s, stop %s did not match' %
+                        (seq, abbrs, sbl.stop))
+                    break
+        if stops_by_line_matches:
+            # This is the best way to match times to stops
+            sbls = linedir.stopbyline_set.order_by('seq')
+            tripstops = []
+            for seq, sbl in enumerate(sbls):
+                tripstops.append(TripStop.objects.create(
+                    tripday=tripday, stop=sbl.stop, node=sbl.node, seq=seq))
+            return pattern_bounds, data_bounds, tripstops
+        
+        # Another possibility is that StopsByLine is just the nodes.
+        #  If this is the case, then look for stops by abbreviation
+        logger.info('Trying nodes-by-line strategy...')
+        nodes_by_line_matches = True
+        node_seq = 1
+        tripstop_params = []
+        for seq, abbrs in enumerate(columns[data_col:]):
+            node_abbr, stop_abbr = abbrs
+            if node_abbr:
+                # Look for the node in StopByLine
+                sbl = linedir.stopbyline_set.get(seq=node_seq)
+                node = sbl.node
+                stop = sbl.stop
+                if ((not node or node_abbr != node.abbr) and
+                        (not stop or node_abbr != stop.node_abbr)):
+                    nodes_by_line_matches = False
+                    logger.info(
+                        'At seq %s, abbrs %s, node %s did not match' %
+                        (seq, abbrs, sbl.node))
+                    break
+                if stop_abbr:
+                    if not stop or stop_abbr != stop.stop_abbr:
+                        nodes_by_line_matches = False
+                        logger.info(
+                            'At seq %s, abbrs %s, stop %s did not match' %
+                            (seq, abbrs, sbl.stop))
+                        break
+                tripstop_params.append(dict(stop=sbl.stop, node=sbl.node))
+                node_seq += 1
+            else:
+                # Look for stop in stops table
+                stops = signup.stop_set.filter(stop_abbr=stop_abbr)
+                if len(stops) == 1:
+                    tripstop_params.append(dict(stop=stops[0]))
+                else:
+                    nodes_by_line_matches = False
+                    logger.info(
+                        'At seq %s, abbrs %s, %d stops found for %s' %
+                        (seq, abbrs, len(stops), stop_abbr))
+                    break
+        if nodes_by_line_matches:
+            tripstops = []
+            for seq, params in enumerate(tripstop_params):
+                params['tripday'] = tripday
+                params['seq'] = seq
+                tripstops.append(TripStop.objects.create(**params))
+            return pattern_bounds, data_bounds, tripstops
+        logger.warning("Can't find stops for TripDay!")
+        return
 
 class Trip(models.Model):
     '''A bus trip on a TripDay'''

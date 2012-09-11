@@ -28,7 +28,7 @@ class TripDayTest(TestCase):
             lon='-95.887364', lat='36.160834',
             stop_name='E Admiral Pl&N Memorial Dr/S Memori')
         self.line100 = Line.objects.create(
-            signup=self.signup, line_id=2893, line_abbr=100, 
+            signup=self.signup, line_id=2893, line_abbr=100,
             line_name='Admiral', line_color=12910532, line_type='FX')
         self.line100dir0 = LineDirection.objects.create(
             line=self.line100, linedir_id=28930, name='To Downtown')
@@ -46,12 +46,7 @@ class TripDayTest(TestCase):
         self.pattern = Pattern.objects.create(
             linedir=self.line100dir0, name='01', pattern_id=11431,
             raw_pattern=[[300, 500]])
-
-    def tearDown(self):
-        self.mox.UnsetStubs()
-
-    def test_import_schedule_basic(self):
-        schedule = """\
+        self.schedule =     """\
 Stop Trips
 ~~~~~~~~~~
 
@@ -71,18 +66,110 @@ Pattern      123Ar            Adm/MemE
 
 """
         self.mox.StubOutWithMock(mtta.models, 'mockable_open')
+
+    def tearDown(self):
+        self.mox.UnsetStubs()
+    
+    def assert_expected_trip_object_counts(self):
+        self.assertEqual(Service.objects.count(), 1)
+        self.assertEqual(TripDay.objects.count(), 1)
+        self.assertEqual(TripStop.objects.count(), 3)
+        self.assertEqual(Trip.objects.count(), 1)
+        self.assertEqual(TripTime.objects.count(), 3)
+
+    def test_import_schedule_basic(self):
         mtta.models.mockable_open(
-            'test.txt').AndReturn(StringIO.StringIO(schedule))
+            'test.txt').AndReturn(StringIO.StringIO(self.schedule))
         self.mox.ReplayAll()
         TripDay.import_schedule(self.signup, 'test.txt')
         self.mox.VerifyAll()
-        
-        # TODO: Check DB values
-    
+        self.assert_expected_trip_object_counts()
+        service = Service.objects.get()
+        self.assertEqual(service.service_id, 1)
+        tripday = TripDay.objects.get()
+        self.assertEqual(tripday.linedir, self.line100dir0)
+        self.assertEqual(tripday.service, service)
+        ts0, ts1, ts2 = TripStop.objects.all()
+        self.assertEqual(ts0.seq, 0)
+        self.assertEqual(ts0.tripday, tripday)
+        self.assertEqual(ts0.stop, self.stop1)
+        self.assertEqual(ts0.node, self.node1)
+        self.assertEqual(ts1.seq, 1)
+        self.assertEqual(ts1.tripday, tripday)
+        self.assertEqual(ts1.stop, self.stop2)
+        self.assertEqual(ts1.node, None)
+        self.assertEqual(ts2.tripday, tripday)
+        self.assertEqual(ts2.seq, 2)
+        self.assertEqual(ts2.stop, self.stop3)
+        self.assertEqual(ts2.node, self.node3)
+        trip = Trip.objects.get()
+        self.assertEqual(trip.seq, 0)
+        self.assertEqual(trip.tripday, tripday)
+        self.assertEqual(trip.pattern, self.pattern)
+        tt0, tt1, tt2 = TripTime.objects.all()
+        self.assertEqual(tt0.trip, trip)
+        self.assertEqual(tt0.tripstop, ts0)
+        self.assertEqual(tt0.time, '7:00')
+        self.assertEqual(tt1.trip, trip)
+        self.assertEqual(tt1.tripstop, ts1)
+        self.assertEqual(tt1.time, '7:30')
+        self.assertEqual(tt2.trip, trip)
+        self.assertEqual(tt2.tripstop, ts2)
+        self.assertEqual(tt2.time, '8:00')
+
+    def test_import_schedule_node_on_stop(self):
+        '''The import succeeds if the node abbr is on the stop instead'''
+        self.stop1.node_abbr = '123Ar'
+        self.stop1.save()
+        self.sbl1.node = None
+        self.sbl1.save()
+        mtta.models.mockable_open(
+            'test.txt').AndReturn(StringIO.StringIO(self.schedule))
+        self.mox.ReplayAll()
+        TripDay.import_schedule(self.signup, 'test.txt')
+        self.mox.VerifyAll()
+        self.assert_expected_trip_object_counts()
+        ts0 = TripStop.objects.get(seq=0)
+        self.assertEqual(ts0.stop, self.stop1)
+        self.assertEqual(ts0.node, None)
+
+    def test_import_schedule_sbl_is_just_nodes(self):
+        '''The import succeeds if the StopByLine is just nodes'''
+        self.sbl2.delete()
+        self.sbl3.seq = 2
+        self.sbl3.save()
+        mtta.models.mockable_open(
+            'test.txt').AndReturn(StringIO.StringIO(self.schedule))
+        self.mox.ReplayAll()
+        TripDay.import_schedule(self.signup, 'test.txt')
+        self.mox.VerifyAll()
+        self.assert_expected_trip_object_counts()
+        ts1 = TripStop.objects.get(seq=1)
+        self.assertEqual(ts1.stop, self.stop2)
+        self.assertEqual(ts1.node, None)
+
     def test_import_schedule_flex(self):
-        # TODO: Check that schedule 580 matches line 508FLEX
-        pass
+        '''Schedule NNN matches NNNFLEX, like 508 -> 508FLEX'''
+        self.schedule = self.schedule.replace(
+            'Line:         100', 'Line:         100S')
+        self.line100.line_abbr = '100SFLX'
+        self.line100.save()
+        mtta.models.mockable_open(
+            'test.txt').AndReturn(StringIO.StringIO(self.schedule))
+        self.mox.ReplayAll()
+        TripDay.import_schedule(self.signup, 'test.txt')
+        self.mox.VerifyAll()
+        self.assert_expected_trip_object_counts()
 
     def test_import_schedule_sflx(self):
-        # TODO: Check that schedule 860 matches 860SFLX
-        pass
+        '''Schedule NNNS matches NNNSFLX, like 860S -> 860SFLX'''
+        self.schedule = self.schedule.replace(
+            'Line:         100', 'Line:         100S')
+        self.line100.line_abbr = '100SFLX'
+        self.line100.save()
+        mtta.models.mockable_open(
+            'test.txt').AndReturn(StringIO.StringIO(self.schedule))
+        self.mox.ReplayAll()
+        TripDay.import_schedule(self.signup, 'test.txt')
+        self.mox.VerifyAll()
+        self.assert_expected_trip_object_counts()
