@@ -135,7 +135,9 @@ Pattern      123Ar            Adm/MemE
 
     def test_import_schedule_sbl_is_just_nodes_two_candidates(self):
         '''
-        The import succeeds if the StopByLine is just nodes
+        The import succeeds if the StopByLine is just nodes, and a stop-only
+        column has two stop matches.  In this case, there is no assigned
+        stop, and it won't be exported
         
         In Aug 2012 signup, 508 was just nodes, but stops were on 902
         '''
@@ -155,33 +157,7 @@ Pattern      123Ar            Adm/MemE
         self.mox.VerifyAll()
         self.assert_expected_trip_object_counts()
         ts1 = TripStop.objects.get(seq=1)
-        self.assertEqual(ts1.stop, self.stop2)
-        
-    def test_import_schedule_sbl_is_just_nodes_two_candidates_other(self):
-        '''
-        The import succeeds if the StopByLine is just nodes
-
-        In Aug 2012 signup, 508 was just nodes, but stops were on 902
-        '''
-        self.sbl2.delete()
-        self.sbl3.seq = 2
-        self.sbl3.save()
-        self.line100dir0.linedir_id += 1
-        self.line100dir0.save()
-        stop4 = Stop.objects.create(
-            signup=self.signup, stop_id=self.stop2.stop_id + 1,
-            stop_abbr=self.stop2.stop_abbr, site_name=self.stop2.site_name,
-            lon=self.stop2.lon, lat=self.stop2.lat,
-            stop_name=self.stop2.stop_name)
-
-        mtta.models.mockable_open(
-            'test.txt').AndReturn(StringIO.StringIO(self.schedule))
-        self.mox.ReplayAll()
-        TripDay.import_schedule(self.signup, 'test.txt')
-        self.mox.VerifyAll()
-        self.assert_expected_trip_object_counts()
-        ts1 = TripStop.objects.get(seq=1)
-        self.assertEqual(ts1.stop, stop4)
+        self.assertEqual(ts1.stop, None)
 
     def test_import_schedule_sbl_is_just_nodes(self):
         '''

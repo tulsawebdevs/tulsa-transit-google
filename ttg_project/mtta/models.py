@@ -414,6 +414,7 @@ class TripDay(models.Model):
         in_dir = 2    # Get / switch the LineDirection
         in_cols = 3   # Get the TripStops
         in_data = 4   # Get the Trip and TripTimes
+        in_error = 5  # Some error, cease processing
         phase = in_intro
 
         linedir = None
@@ -487,7 +488,8 @@ class TripDay(models.Model):
                         tripday, col_lines)
                     if not parsed:
                         # Parse errors, abandon
-                        return
+                        phase = in_error
+                        break
                     else:
                         pattern_bounds, data_bounds, tripstops = parsed
                     tripstop_cnt += len(tripstops)
@@ -522,6 +524,9 @@ class TripDay(models.Model):
                             TripTime.objects.create(
                                 trip=trip, tripstop=tripstop, time=time)
                             triptimes_cnt += 1
+        if phase == in_error:
+            logger.warning(
+                'Errors detected during parsing, may be partially imported.')
         logger.info(
             'Parsed %d times for %d trips, %d stops, and %d line directions.'
                 % (triptimes_cnt, trip_cnt, tripstop_cnt, tripday_cnt))
@@ -530,7 +535,9 @@ class TripStop(models.Model):
     '''A stop on a TripDay'''
     tripday = models.ForeignKey(TripDay)
     stop = models.ForeignKey(Stop, null=True, blank=True)
+    stop_abbr = models.CharField(max_length=7)
     node = models.ForeignKey(Node, null=True, blank=True)
+    node_abbr = models.CharField(max_length=8, blank=True)
     seq = models.IntegerField()
 
     class Meta:
@@ -587,6 +594,7 @@ class TripStop(models.Model):
         #  them to data.  First, let's test if StopsByLine is
         #  accurate
         stops_by_line_matches = True
+        tripstop_params = []
         for seq, abbrs in enumerate(columns[data_col:]):
             node_abbr, stop_abbr = abbrs
             sbl = linedir.stopbyline_set.get(seq=seq+1)
@@ -607,18 +615,22 @@ class TripStop(models.Model):
                         'At seq %s, abbrs %s, stop %s did not match' %
                         (seq, abbrs, sbl.stop))
                     break
+            tripstop_params.append(
+                dict(stop=stop, node=node, stop_abbr=stop_abbr,
+                     node_abbr=node_abbr))
         if stops_by_line_matches:
             # This is the best way to match times to stops
-            sbls = linedir.stopbyline_set.order_by('seq')
             tripstops = []
-            for seq, sbl in enumerate(sbls):
-                tripstops.append(TripStop.objects.create(
-                    tripday=tripday, stop=sbl.stop, node=sbl.node, seq=seq))
+            for seq, params in enumerate(tripstop_params):
+                params['tripday'] = tripday
+                params['seq'] = seq
+                tripstops.append(TripStop.objects.create(**params))
             return pattern_bounds, data_bounds, tripstops
 
         # Another possibility is that StopsByLine is just the nodes.
         #  If this is the case, then guess at stops
-        logger.info('Trying stops-by-similar-line strategy...')
+        #  Panic on a node mismatch, but OK if no exact stop match
+        logger.info('Trying nodes-by-line strategy...')
 
         # Test the abbreviations against the candidates
         nodes_by_line_matches = True
@@ -653,25 +665,13 @@ class TripStop(models.Model):
                     stop_abbr=stop_abbr).order_by('stop_id')
                 if len(stops) == 1:
                     stop = stops[0]
-                elif len(stops) == 2:
-                    if linedir.linedir_id % 2 == 0:
-                        stop = stops[0]
-                    else:
-                        stop = stops[1]
-                    logger.info(
-                        'At seq %s, abbrs %s, 2 stops found (%s, %s),'
-                        'guessing %s for linedir %s' %
-                        (seq, abbrs, stops[0].stop_id, stops[1].stop_id,
-                         stop, linedir.linedir_id))
                 else:
-                    logger.info(
-                        'At seq %s, abbrs %s, %d stops found for %s' %
-                        (seq, abbrs, len(stops), stop_abbr))
-                if stop:
-                    tripstop_params.append(dict(stop=stop))
-                else:
-                    nodes_by_line_matches = False
-                    break
+                    stop = None
+                    logger.warning(
+                        'At stop %s, %d stops found for abbreviation "%s"'
+                        ' - Leaving stop unassigned' %
+                        (seq, len(stops), stop_abbr))
+                tripstop_params.append(dict(stop=stop, stop_abbr=stop_abbr))
         if nodes_by_line_matches:
             tripstops = []
             for seq, params in enumerate(tripstop_params):
@@ -679,8 +679,7 @@ class TripStop(models.Model):
                 params['seq'] = seq
                 tripstops.append(TripStop.objects.create(**params))
             return pattern_bounds, data_bounds, tripstops
-        logger.warning("Can't find stops for TripDay!")
-        # TODO: Try finding the nodes on other lines to disambiguate stops
+        logger.warning("Can't find stops for TripDay %s!" % tripday)
         return
 
 class Trip(models.Model):
