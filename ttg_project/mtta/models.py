@@ -384,10 +384,14 @@ class StopByPattern(models.Model):
 
 class Service(models.Model):
     signup = models.ForeignKey(SignUp)
-    service_id = models.IntegerField()
+    service_id = models.IntegerField(
+        choices=((1, 'Weekday'), (2, 'Saturday')))
 
     class Meta:
         unique_together = ordering = ('signup', 'service_id')
+    
+    def __unicode__(self):
+        return '%s - %s' % (self.signup.id, self.get_service_id_display())
 
 
 class TripDay(models.Model):
@@ -397,6 +401,9 @@ class TripDay(models.Model):
 
     class Meta:
         unique_together = ordering = ('linedir', 'service')
+    
+    def __unicode__(self):
+        return '%s - %s' % (self.linedir, self.service)
 
     @classmethod
     def import_schedule(cls, signup, path):
@@ -528,6 +535,9 @@ class TripStop(models.Model):
 
     class Meta:
         unique_together = ordering = ('tripday', 'seq')
+    
+    def __unicode__(self):
+        return "%s - %s" % (self.tripday, self.seq)
 
     @classmethod
     def parse_schedule_for_tripstops(cls, tripday, col_lines):
@@ -654,6 +664,7 @@ class TripStop(models.Model):
                 tripstops.append(TripStop.objects.create(**params))
             return pattern_bounds, data_bounds, tripstops
         logger.warning("Can't find stops for TripDay!")
+        # TODO: Try finding the nodes on other lines to disambiguate stops
         return
 
 class Trip(models.Model):
@@ -663,13 +674,19 @@ class Trip(models.Model):
     seq = models.IntegerField()
 
     class Meta:
-        unique_together = ordering = ('tripday', 'pattern', 'seq')
+        unique_together = ordering = ('tripday', 'seq', 'pattern')
+    
+    def __unicode__(self):
+        return "%s - %s" % (self.tripday, self.seq)
 
 class TripTime(models.Model):
     '''A stop time for a Trip'''
     trip = models.ForeignKey(Trip)
     tripstop = models.ForeignKey(TripStop)
     time = models.CharField(max_length=5)
+    
+    def __unicode__(self):
+        return "%s - %s" % (self.tripstop, self.time)
 
     class Meta:
         unique_together = ordering = ('trip', 'tripstop')
