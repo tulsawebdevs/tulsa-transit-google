@@ -187,6 +187,35 @@ Pattern      123Ar            Adm/MemE
         self.assertEqual(ts2.stop, self.stop3)
         self.assertEqual(ts2.node, self.node3)
 
+    def test_import_schedule_sbl_has_wrong_nodes(self):
+        '''
+        StopByLine has a bad node, but the stop is found
+
+        In Aug 2012 signup, 508 was just nodes, and wrong
+        '''
+        self.sbl2.delete()
+        self.sbl3.seq = 2
+        self.sbl3.save()
+        self.schedule = self.schedule.replace('Adm/MemE', 'ADMMEM')
+        mtta.models.mockable_open(
+            'test.txt').AndReturn(StringIO.StringIO(self.schedule))
+        self.mox.ReplayAll()
+        TripDay.import_schedule(self.signup, 'test.txt')
+        self.mox.VerifyAll()
+        self.assert_expected_trip_object_counts()
+        tripday = TripDay.objects.get()
+        ts0, ts1, ts2 = TripStop.objects.all()
+        self.assertEqual(ts0.stop, self.stop1)
+        self.assertEqual(ts0.node, self.node1)
+        self.assertEqual(ts1.seq, 1)
+        self.assertEqual(ts1.tripday, tripday)
+        self.assertEqual(ts1.stop, self.stop2)
+        self.assertEqual(ts1.node, None)
+        self.assertEqual(ts2.tripday, tripday)
+        self.assertEqual(ts2.seq, 2)
+        self.assertEqual(ts2.stop, self.stop3)
+        self.assertEqual(ts2.node, None)
+
     def test_import_schedule_flex(self):
         '''Schedule NNN matches NNNFLEX, like 508 -> 508FLEX'''
         self.schedule = self.schedule.replace(

@@ -629,58 +629,63 @@ class TripStop(models.Model):
 
         # Another possibility is that StopsByLine is just the nodes.
         #  If this is the case, then guess at stops
-        #  Panic on a node mismatch, but OK if no exact stop match
+        #  Try for a node match, then for a stop match
         logger.info('Trying nodes-by-line strategy...')
 
         # Test the abbreviations against the candidates
-        nodes_by_line_matches = True
         node_seq = 1
         tripstop_params = []
         for seq, abbrs in enumerate(columns[data_col:]):
             node_abbr, stop_abbr = abbrs
+            # Look for the node in StopByLine
             if node_abbr:
-                # Look for the node in StopByLine
                 sbl = linedir.stopbyline_set.get(seq=node_seq)
                 node = sbl.node
                 stop = sbl.stop
-                if ((not node or node_abbr != node.abbr) and
-                        (not stop or node_abbr != stop.node_abbr)):
-                    nodes_by_line_matches = False
+                node_match = (node and node_abbr == node.abbr)
+                stop_node_match = (stop and node_abbr == stop.node_abbr)
+                any_node_match = node_match or stop_node_match
+                stop_match = (stop and stop_abbr == stop.stop_abbr)
+                if stop_node_match and not node_match:
                     logger.info(
-                        'At seq %s, abbrs %s, node %s did not match' %
-                        (seq, abbrs, sbl.node))
-                    break
-                if stop_abbr:
-                    if not stop or stop_abbr != stop.stop_abbr:
-                        nodes_by_line_matches = False
-                        logger.info(
-                            'At seq %s, abbrs %s, stop %s did not match' %
-                            (seq, abbrs, sbl.stop))
-                        break
-                tripstop_params.append(dict(stop=sbl.stop, node=sbl.node))
-                node_seq += 1
+                        'On linedir %s seq %s, node %s did not match "%s" but'
+                        ' stop %s did' % 
+                        (linedir, seq, node, node_abbr, sbl.stop))
+                if not any_node_match:
+                    logger.info(
+                        'On linedir %s seq %s, node %s did not match "%s" and'
+                        ' stop %s did not either' % 
+                        (linedir, seq, node, node_abbr, sbl.stop))
+                if not stop_match:
+                    logger.info(
+                        'On linedir %s seq %s, stop %s did not match "%s"' %
+                        (linedir, seq, stop, stop_abbr))
+                if any_node_match and stop_match:
+                    if not node_match:
+                        node = None
+                    tripstop_params.append(dict(stop=sbl.stop, node=node))
+                    node_seq += 1
+                    continue
+            
+            # Look for stops in the SignUp with the same ID
+            stops = signup.stop_set.filter(
+                stop_abbr=stop_abbr).order_by('stop_id')
+            if len(stops) == 1:
+                stop = stops[0]
             else:
-                # Look for stops in the SignUp with the same ID
-                stops = signup.stop_set.filter(
-                    stop_abbr=stop_abbr).order_by('stop_id')
-                if len(stops) == 1:
-                    stop = stops[0]
-                else:
-                    stop = None
-                    logger.warning(
-                        'At stop %s, %d stops found for abbreviation "%s"'
-                        ' - Leaving stop unassigned' %
-                        (seq, len(stops), stop_abbr))
-                tripstop_params.append(dict(stop=stop, stop_abbr=stop_abbr))
-        if nodes_by_line_matches:
-            tripstops = []
-            for seq, params in enumerate(tripstop_params):
-                params['tripday'] = tripday
-                params['seq'] = seq
-                tripstops.append(TripStop.objects.create(**params))
-            return pattern_bounds, data_bounds, tripstops
-        logger.warning("Can't find stops for TripDay %s!" % tripday)
-        return
+                stop = None
+                logger.warning(
+                    'At stop %s, %d stops found for stop "%s"'
+                    ' - Leaving stop unassigned' %
+                    (seq, len(stops), stop_abbr))
+            tripstop_params.append(dict(stop=stop, stop_abbr=stop_abbr))
+        tripstops = []
+        for seq, params in enumerate(tripstop_params):
+            params['tripday'] = tripday
+            params['seq'] = seq
+            tripstops.append(TripStop.objects.create(**params))
+        return pattern_bounds, data_bounds, tripstops
+
 
 class Trip(models.Model):
     '''A bus trip on a TripDay'''
