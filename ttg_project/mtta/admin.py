@@ -10,51 +10,52 @@ from mtta.models import (
 # TODO: Even more useful names
 
 class LineAdmin(admin.ModelAdmin):
-    readonly_fields = ('signup',)
+    raw_id_fields = ('signup',)
 
 
 class LineDirectionAdmin(admin.ModelAdmin):
-    readonly_fields = ('line',)
+    raw_id_fields = ('line',)
 
 
 class NodeAdmin(admin.ModelAdmin):
-    readonly_fields = ('stop',)
+    raw_id_fields = ('stop',)
 
 
 class PatternAdmin(admin.ModelAdmin):
-    readonly_fields = ('linedir', 'raw_pattern', 'fixed_pattern')
+    raw_id_fields = ('linedir',)
+    read_only_fields = ('raw_pattern', 'fixed_pattern')
 
 
 class ServiceAdmin(admin.ModelAdmin):
-    readonly_fields = ('signup',)
+    raw_id_fields = ('signup',)
  
 
 class StopAdmin(admin.ModelAdmin):
-    readonly_fields = ('signup',)
+    raw_id_fields = ('signup',)
 
 
 class StopByLineAdmin(admin.ModelAdmin):
-    readonly_fields = ('stop', 'linedir', 'node')
+    raw_id_fields = ('stop', 'linedir', 'node')
 
 
 class StopByPatternAdmin(admin.ModelAdmin):
-    readonly_fields = ('stop', 'linedir', 'pattern', 'node')
+    raw_id_fields = ('stop', 'linedir', 'pattern', 'node')
 
 
 class TripDayAdmin(admin.ModelAdmin):
-    readonly_fields = ('linedir', 'service')
+    raw_id_fields = ('linedir', 'service')
 
 
 class TripStopAdmin(admin.ModelAdmin):
-    readonly_fields = ('tripday', 'stop', 'node')
+    raw_id_fields = ('tripday', 'stop', 'node')
 
 
 class TripTimeAdmin(admin.ModelAdmin):
-    readonly_fields = ('trip', 'tripstop')
+    raw_id_fields = ('trip', 'tripstop')
 
 
 class TripAdmin(admin.ModelAdmin):
-    readonly_fields = ('tripday', 'pattern')
+    raw_id_fields = ('tripday', 'pattern')
 
 
 admin.site.register(Line, LineAdmin)

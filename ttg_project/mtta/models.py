@@ -6,6 +6,8 @@ from django_extensions.db.fields.json import JSONField
 import dbfpy.dbf
 import shapefile
 
+from mtta.utils import haversine
+
 logger = logging.getLogger(__name__)
 
 
@@ -17,7 +19,12 @@ class SignUp(models.Model):
     name = models.CharField(max_length=255)
     created = models.DateTimeField(auto_now_add=True)
     _unset_name = '<unset>'
-
+    # TODO: Don't hardcode agency details
+    _agency_defaults = dict(
+        name='Tulsa Transit', url='http://www.tulsatransit.org',
+        timezone='America/Chicago', phone='(918) 582-2100', lang='en',
+        fare_url='http://tulsatransit.org/fares-passes/')
+    
     def import_folder(self, folder, stdout=None):
         data_file = dict()
         names = (
@@ -55,6 +62,15 @@ class SignUp(models.Model):
         StopByPattern.import_dbf(self, data_file['stopsbypattern.dbf'])
         for path in stop_trips:
             TripDay.import_schedule(self, path)
+
+    def copy_to_feed(self):
+        from multigtfs.models import Feed
+        feed = Feed.objects.create(name=self.name)
+        feed.agency_set.get_or_create(defaults=self._agency_defaults)
+        for line in self.line_set.all():
+            logger.info('Exporting data for line %s...' % line)
+            line.copy_to_feed(feed)
+        return feed
 
     def __unicode__(self):
         return "%s - %s" % (self.id, self.name or '(No Name)')
@@ -108,6 +124,47 @@ class Line(models.Model):
             'Parsed %d Lines, %s LineDirections.' % (line_cnt, linedir_cnt))
 
 
+    def color_as_hex(self):
+        '''Convert integer value into a hex color value
+
+        Because SQLite strips leading 0's from numbers, we store strangely.
+        '''
+        try:
+            return '%06x' % self.line_color
+        except:
+            return self.color
+
+    def text_color_as_hex(self):
+        '''Convert integer value into a contrasting hex color value
+        '''
+        back_color = self.color_as_hex()
+        # http://www.webmasterworld.com/forum88/9769.htm
+        r = int(back_color[:2], 16)
+        g = int(back_color[2:4], 16)
+        b = int(back_color[4:6], 16)
+
+        color_value = ((r * 299) + (g * 587) + (b * 114)) / 1000
+
+        if color_value > 130:
+            text_color = '000000'
+        else:
+            text_color = 'ffffff'
+        return text_color
+    
+    def short_name(self):
+        return self.line_abbr.replace('FLEX', 'FX').replace('SFLX', 'SF')
+
+    def copy_to_feed(self, feed):
+        gtfs_route, created = feed.route_set.get_or_create(
+            route_id=self.line_id, defaults=dict(
+                short_name=self.short_name(),
+                long_name=self.line_name.replace(self.line_abbr, ''),
+                rtype=3, color=self.color_as_hex(),
+                text_color=self.text_color_as_hex()))
+        for linedir in self.linedirection_set.all():
+            linedir.copy_to_feed(feed, gtfs_route)
+
+
 class LineDirection(models.Model):
     '''The two line directions for a Line from lines.dbf'''
     linedir_id = models.IntegerField(db_index=True)
@@ -120,6 +177,10 @@ class LineDirection(models.Model):
     def __unicode__(self):
         return "%s - %s - %s" % (
             self.line, self.linedir_id, self.name)
+
+    def copy_to_feed(self, feed, gtfs_route):
+        for tripday in self.tripday_set.all():
+            tripday.copy_to_feed(feed, gtfs_route)
 
 
 class Pattern(models.Model):
@@ -175,15 +236,84 @@ class Pattern(models.Model):
                 part.append((lat, lon))
             if part:
                 parts.append((part[0], part[1]))
-            points = parts
             point_cnt += 2 * len(parts)
             cls.objects.create(
                 pattern_id=pattern_id, name=pattern, linedir=linedir,
-                raw_pattern=points)
+                raw_pattern=parts)
             pattern_cnt += 1
         logger.info(
             'Parsed %d Shapes with a total of %d points.' % (
                 pattern_cnt, point_cnt))
+
+    def copy_to_feed(self, feed):
+        shape_id = "%s_%s" % (self.pattern_id, self.name)
+        gtfs_shape, created = feed.shape_set.get_or_create(shape_id=shape_id)
+        if created:
+            for seq, (lat, lon) in enumerate(self.get_points()):
+                gtfs_shape.points.create(sequence=seq, lat=lat, lon=lon)
+        return gtfs_shape
+    
+    def get_points(self):        
+        def node_dist(node1, node2):
+            return haversine(node1[0], node1[1], node2[0], node2[1])
+        
+        if not self.fixed_pattern:
+            # Create line
+            line = []
+            parts = self.raw_pattern
+            first_nodes = None
+            min_add_dist = 0.140
+            for seq, (node1, node2) in enumerate(parts):
+                if first_nodes:
+                    first_node1, first_node2 = first_nodes
+                    # Sort node orders by shortest distance between segments
+                    node_orders = sorted([
+                        (node_dist(first_node1, node1),
+                         (first_node2, first_node1, node1, node2)),
+                        (node_dist(first_node1, node2),
+                         (first_node2, first_node1, node2, node1)),
+                        (node_dist(first_node2, node1),
+                         (first_node1, first_node2, node1, node2)),
+                        (node_dist(first_node2, node2),
+                         (first_node1, first_node2, node2, node1))])
+                    dist, (n1, n2, n3, n4) = node_orders[0]
+                    # Optimize for shared point in the two segements
+                    if n2 == n3:
+                        line.extend((n1, n2, n4))
+                    elif node_dist(n2, n3) < min_add_dist:
+                        # print "Pattern %s:%s for line %s: Adding first segment (%0.5f, %0.5f) -> (%0.5f, %0.5f) (%0.1f meters)" % (pattern_id, pattern, linedir_id, n2[0], n2[1], n3[0], n3[1], 1000.0 * node_dist(n2, n3))
+                        line.extend((n1, n2, n3, n4))
+                    else:
+                        pass
+                        #if verbose:
+                        #    print "Pattern %s:%s for line %s: Discarding first segment (%0.5f, %0.5f) -> (%0.5f, %0.5f) (%0.1f meters)" % (pattern_id, pattern, linedir_id, n2[0], n2[1], n3[0], n3[1], 1000.0 * node_dist(n2, n3))
+                    first_nodes = None
+                elif line:
+                    last_node = line[-1]
+                    # Sort node orders by shortest distance to tail point
+                    node_orders = sorted([
+                        (node_dist(last_node, node1),
+                            (last_node, node1, node2)),
+                        (node_dist(last_node, node2),
+                            (last_node, node2, node1))])
+                    n1, n2, n3 = node_orders[0][1]
+                    # Optimize for tail point in the new segment
+                    if n1 == n2:
+                        line.append(n3)
+                    elif node_dist(n1, n2) < min_add_dist:
+                        #if verbose:
+                        #    print "Pattern %s:%s for line %s: Adding segment (%0.5f, %0.5f) -> (%0.5f, %0.5f) (%0.1f meters)" % (pattern_id, pattern, linedir_id, n1[0], n1[1], n2[0], n2[1], 1000.0 * node_dist(n1, n2))
+                        line.extend((n2, n3))
+                    else:
+                        pass
+                        #if verbose:
+                        #    print "Pattern %s:%s for line %s: Discarding segment (%0.5f, %0.5f) -> (%0.5f, %0.5f) (%0.1f meters)" % (pattern_id, pattern, linedir_id, n1[0], n1[1], n2[0], n2[1], 1000.0 * node_dist(n1, n2))
+                else:
+                    # Collect the first segment for later
+                    first_nodes = (node1, node2)
+            self.fixed_pattern = line
+            self.save()
+        return self.fixed_pattern        
 
 
 class Stop(models.Model):
@@ -229,6 +359,13 @@ class Stop(models.Model):
                 lat=lat, lon=lon)
             stop_cnt += 1
         logger.info('Parsed %d Stops.' % stop_cnt)
+
+    def copy_to_feed(self, feed):
+        gtfs_stop, created = feed.stop_set.get_or_create(
+            stop_id=self.stop_id, defaults=dict(
+                name=self.stop_name, lat=self.lat, lon=self.lon,
+                desc=self.site_name, code=self.stop_abbr, location_type=0))
+        return gtfs_stop
 
 
 class Node(models.Model):
@@ -386,12 +523,27 @@ class Service(models.Model):
     signup = models.ForeignKey(SignUp)
     service_id = models.IntegerField(
         choices=((1, 'Weekday'), (2, 'Saturday')))
+    _service_defaults = {
+        1: dict(monday=True, tuesday=True, wednesday=True, thursday=True,
+                friday=True, saturday=False, sunday=False,
+                start_date='2012-08-01', end_date='2013-08-01'),
+        2: dict(monday=False, tuesday=False, wednesday=False, thursday=False,
+                friday=False, saturday=True, sunday=False,
+                start_date='2012-08-01', end_date='2013-08-01')
+    }
 
     class Meta:
         unique_together = ordering = ('signup', 'service_id')
 
     def __unicode__(self):
         return '%s - %s' % (self.signup.id, self.get_service_id_display())
+
+    def copy_to_feed(self, feed):
+        # TODO: Don't hardcode these
+        gtfs_service, created = feed.service_set.get_or_create(
+            service_id=str(self.service_id),
+            defaults=self._service_defaults[self.service_id])
+        return gtfs_service
 
 
 class TripDay(models.Model):
@@ -531,6 +683,13 @@ class TripDay(models.Model):
             'Parsed %d times for %d trips, %d stops, and %d line directions.'
                 % (triptimes_cnt, trip_cnt, tripstop_cnt, tripday_cnt))
 
+    def copy_to_feed(self, feed, gtfs_route):
+        gtfs_service = self.service.copy_to_feed(feed)
+        for trip in self.trip_set.all():
+            trip.copy_to_feed(feed, gtfs_route, gtfs_service)
+
+
+
 class TripStop(models.Model):
     '''A stop on a TripDay'''
     tripday = models.ForeignKey(TripDay)
@@ -649,12 +808,12 @@ class TripStop(models.Model):
                 if stop_node_match and not node_match:
                     logger.info(
                         'On linedir %s seq %s, node %s did not match "%s" but'
-                        ' stop %s did' % 
+                        ' stop %s did' %
                         (linedir, seq, node, node_abbr, sbl.stop))
                 if not any_node_match:
                     logger.info(
                         'On linedir %s seq %s, node %s did not match "%s" and'
-                        ' stop %s did not either' % 
+                        ' stop %s did not either' %
                         (linedir, seq, node, node_abbr, sbl.stop))
                 if not stop_match:
                     logger.info(
@@ -666,7 +825,7 @@ class TripStop(models.Model):
                     tripstop_params.append(dict(stop=sbl.stop, node=node))
                     node_seq += 1
                     continue
-            
+
             # Look for stops in the SignUp with the same ID
             stops = signup.stop_set.filter(
                 stop_abbr=stop_abbr).order_by('stop_id')
@@ -699,6 +858,36 @@ class Trip(models.Model):
     def __unicode__(self):
         return "%s - %s" % (self.tripday, self.seq)
 
+    def copy_to_feed(self, feed, gtfs_route, gtfs_service):
+        route_id = gtfs_route.short_name
+        service_id = gtfs_service.service_id
+        linedir = self.tripday.linedir
+        direction = str(linedir.linedir_id)[-1]
+        trip_id = "%s_%s_%s_%02d" % (route_id, service_id, direction, self.seq)
+        gtfs_shape = self.pattern.copy_to_feed(feed)
+        gtfs_trip, created = gtfs_route.trip_set.get_or_create(
+            trip_id=trip_id, defaults=dict(
+                headsign=linedir.name, direction=direction, shape=gtfs_shape))
+        gtfs_trip.services.add(gtfs_service)
+        
+        times = []
+        for triptime in self.triptime_set.all():
+            force_time = times is None
+            gtfs_stoptime = triptime.copy_to_feed(feed, gtfs_trip, force_time)
+            if gtfs_stoptime:
+                times.append((triptime, gtfs_stoptime))
+
+        # Force last to have a time
+        last_triptime, last_stoptime = times.pop()
+        while not str(last_stoptime.arrival_time):
+            new_stoptime = last_triptime.copy_to_feed(feed, gtfs_trip, True)
+            if not new_stoptime:
+                last_stoptime.delete()
+                last_triptime, last_stoptime = times.pop()
+            else:
+                last_stoptime = new_stoptime
+
+
 class TripTime(models.Model):
     '''A stop time for a Trip'''
     trip = models.ForeignKey(Trip)
@@ -710,3 +899,25 @@ class TripTime(models.Model):
 
     class Meta:
         unique_together = ordering = ('trip', 'tripstop')
+
+    def copy_to_feed(self, feed, gtfs_trip, force_time):
+        if not self.tripstop.stop:
+            logger.info('Skipping TripTime "%s" - no stop' % self)
+            return
+        if self.time and (self.tripstop.node_abbr or force_time):
+            time = self.time
+        else:
+            time = None
+        if force_time and not time:
+            logger.warning('Skipping TripTime "%s" - needs time' % self)
+            return None
+        gtfs_stop = self.tripstop.stop.copy_to_feed(feed)
+        gtfs_stoptime, created = gtfs_trip.stoptime_set.get_or_create(
+            stop=gtfs_stop, defaults=dict(
+                arrival_time=time, departure_time=time,
+                stop_sequence=self.tripstop.seq))
+        if force_time and not created:
+            gtfs_stoptime.arrival_time=time
+            gtfs_stoptime.departure_time=time
+            gtfs_stoptime.save()
+        return gtfs_stoptime
