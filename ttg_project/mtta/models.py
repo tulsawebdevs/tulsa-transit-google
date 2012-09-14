@@ -73,24 +73,24 @@ class SignUp(models.Model):
         return feed
 
     def __unicode__(self):
-        return "%s - %s" % (self.id, self.name or '(No Name)')
+        return "%s-%s" % (self.id, self.name or '(No Name)')
 
 
 class Line(models.Model):
     '''A transit line from lines.dbf'''
     signup = models.ForeignKey(SignUp)
     line_id = models.IntegerField(db_index=True)
-    line_abbr = models.CharField(max_length=8)
+    line_abbr = models.CharField(max_length=8, db_index=True)
     line_name = models.CharField(max_length=30)
     line_color = models.IntegerField()
     line_type = models.CharField(max_length=2)
 
     class Meta:
         unique_together = ('signup', 'line_id')
+        ordering = ('line_id',)
 
     def __unicode__(self):
-        return "%s - %s - %s" % (
-            self.signup_id, self.line_abbr, self.line_name)
+        return "%s-%s" % (self.line_id, self.line_abbr)
 
     @classmethod
     def import_dbf(cls, signup, path):
@@ -173,10 +173,10 @@ class LineDirection(models.Model):
 
     class Meta:
         unique_together = ('linedir_id', 'line')
+        ordering = ('linedir_id',)
 
     def __unicode__(self):
-        return "%s - %s - %s" % (
-            self.line, self.linedir_id, self.name)
+        return "%s-%s" % (self.linedir_id, self.name)
 
     def copy_to_feed(self, feed, gtfs_route):
         for tripday in self.tripday_set.all():
@@ -195,8 +195,7 @@ class Pattern(models.Model):
         unique_together = ('linedir', 'pattern_id')
 
     def __unicode__(self):
-        return "%s - %s - %s" % (
-            self.linedir, self.pattern_id, self.name)
+        return "%s-%s" % (self.pattern_id, self.name)
 
     @classmethod
     def import_shp(cls, signup, path):
@@ -320,7 +319,7 @@ class Stop(models.Model):
     '''A stop from stops.dbf'''
     signup = models.ForeignKey(SignUp)
     stop_id = models.IntegerField(db_index=True)
-    stop_abbr = models.CharField(max_length=7)
+    stop_abbr = models.CharField(max_length=7, db_index=True)
     stop_name = models.CharField(max_length=50)
     node_abbr = models.CharField(max_length=8, blank=True)
     site_name = models.CharField(max_length=50, blank=True)
@@ -333,10 +332,10 @@ class Stop(models.Model):
 
     class Meta:
         unique_together = ('signup', 'stop_id')
+        ordering = ('signup', 'stop_id')
 
     def __unicode__(self):
-        return "%s - %s - %s" % (
-            self.signup.id, self.stop_id, self.stop_name)
+        return "%s-%s" % (self.stop_id, self.stop_abbr)
 
     @classmethod
     def import_dbf(cls, signup, path):
@@ -380,10 +379,11 @@ class Node(models.Model):
     name = models.CharField(max_length=50)
 
     def __unicode__(self):
-        return "%s - %s - %s" % (self.stop, self.node_id, self.abbr)
+        return "%s-%s" % (self.node_id, self.abbr)
 
     class Meta:
         unique_together = ('stop', 'node_id')
+        ordering = ('node_id', 'stop__stop_id')
 
 
 class StopByLine(models.Model):
@@ -398,7 +398,7 @@ class StopByLine(models.Model):
         verbose_name_plural = "stops by line"
 
     def __unicode__(self):
-        return '%s - %s - %s' % (self.linedir, self.seq, self.stop)
+        return '%s-%02d' % (self.linedir.linedir_id, self.seq)
 
     @classmethod
     def import_dbf(cls, signup, path):
@@ -461,7 +461,7 @@ class StopByPattern(models.Model):
         verbose_name_plural = "stops by pattern"
 
     def __unicode__(self):
-        return '%s -  %s - %s' % (self.pattern, self.seq, self.stop)
+        return '%s-%02d' % (self.pattern.pattern_id, self.seq)
 
     @classmethod
     def import_dbf(cls, signup, path):
@@ -536,7 +536,7 @@ class Service(models.Model):
         unique_together = ordering = ('signup', 'service_id')
 
     def __unicode__(self):
-        return '%s - %s' % (self.signup.id, self.get_service_id_display())
+        return '%s-%s' % (self.service_id, self.get_service_id_display())
 
     def copy_to_feed(self, feed):
         # TODO: Don't hardcode these
@@ -555,7 +555,7 @@ class TripDay(models.Model):
         unique_together = ordering = ('linedir', 'service')
 
     def __unicode__(self):
-        return '%s - %s' % (self.linedir, self.service)
+        return '%s-%s' % (self.linedir.linedir_id, self.service.service_id)
 
     @classmethod
     def import_schedule(cls, signup, path):
@@ -703,7 +703,7 @@ class TripStop(models.Model):
         unique_together = ordering = ('tripday', 'seq')
 
     def __unicode__(self):
-        return "%s - %s" % (self.tripday, self.seq)
+        return "%s-%02d" % (self.tripday, self.seq)
 
     @classmethod
     def parse_schedule_for_tripstops(cls, tripday, col_lines):
@@ -856,7 +856,7 @@ class Trip(models.Model):
         unique_together = ordering = ('tripday', 'seq', 'pattern')
 
     def __unicode__(self):
-        return "%s - %s" % (self.tripday, self.seq)
+        return "%s-%s-%s" % (self.tripday, self.pattern, self.seq)
 
     def copy_to_feed(self, feed, gtfs_route, gtfs_service):
         route_id = gtfs_route.short_name
@@ -895,10 +895,11 @@ class TripTime(models.Model):
     time = models.CharField(max_length=5)
 
     def __unicode__(self):
-        return "%s - %s" % (self.tripstop, self.time)
+        return "%s-%s" % (self.tripstop, self.time)
 
     class Meta:
         unique_together = ordering = ('trip', 'tripstop')
+        ordering = ('trip', 'tripstop', 'time')
 
     def copy_to_feed(self, feed, gtfs_trip, force_time):
         if not self.tripstop.stop:
