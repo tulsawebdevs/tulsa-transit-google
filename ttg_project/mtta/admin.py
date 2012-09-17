@@ -82,7 +82,10 @@ class TripStopAdmin(admin.ModelAdmin):
 class TripTimeAdmin(admin.ModelAdmin):
     raw_id_fields = ('trip', 'tripstop')
     list_filter = ('trip__tripday__linedir__line',)
-    list_display = ('__unicode__', 'trip', 'tripstop', 'time')
+    list_display = ('__unicode__', 'trip', 'tripstop', 'stop', 'time')
+    
+    def stop(self, instance):
+        return str(instance.tripstop.stop)
 
 
 class TripAdmin(admin.ModelAdmin):

@@ -24,6 +24,15 @@ class SignUp(models.Model):
         name='Tulsa Transit', url='http://www.tulsatransit.org',
         timezone='America/Chicago', phone='(918) 582-2100', lang='en',
         fare_url='http://tulsatransit.org/fares-passes/')
+    _calendar_dates = (
+        (1, '2012-11-22', 2),
+        (1, '2012-11-23', 2),
+        (2, '2012-11-23', 1),
+        (1, '2012-12-24', 2),
+        (2, '2012-12-24', 1),
+        (1, '2012-12-25', 2),
+        (1, '2013-01-01', 2),
+    )
     
     def import_folder(self, folder, stdout=None):
         data_file = dict()
@@ -70,6 +79,9 @@ class SignUp(models.Model):
         for line in self.line_set.all():
             logger.info('Exporting data for line %s...' % line)
             line.copy_to_feed(feed)
+        for service_id, date, etype in self._calendar_dates:
+            service = feed.service_set.get(service_id=service_id)
+            service.servicedate_set.create(date=date, exception_type=etype)
         return feed
 
     def __unicode__(self):
@@ -802,7 +814,8 @@ class TripStop(models.Model):
                 node = sbl.node
                 stop = sbl.stop
                 node_match = (node and node_abbr == node.abbr)
-                stop_node_match = (stop and node_abbr == stop.node_abbr)
+                stop_node_match = (
+                    stop and node_abbr.lower() == stop.node_abbr.lower())
                 any_node_match = node_match or stop_node_match
                 stop_match = (stop and stop_abbr == stop.stop_abbr)
                 if stop_node_match and not node_match:
@@ -870,22 +883,25 @@ class Trip(models.Model):
                 headsign=linedir.name, direction=direction, shape=gtfs_shape))
         gtfs_trip.services.add(gtfs_service)
         
+        no_time = self.triptime_set.filter(time='')
+        if no_time.exists():
+            logger.info('On Trip %s, skipping %d stops with no time.' %
+                        (self, no_time.count()))
+        no_stop = self.triptime_set.filter(tripstop__stop=None)
+        if no_stop.exists():
+            logger.info('On Trip %s, skipping %d stops with ambiguous stop'
+                        ' abbreviations.' % (self, no_stop.count()))
+        
+        # Gather the valid trip times
         times = []
-        for triptime in self.triptime_set.all():
-            force_time = times is None
-            gtfs_stoptime = triptime.copy_to_feed(feed, gtfs_trip, force_time)
-            if gtfs_stoptime:
-                times.append((triptime, gtfs_stoptime))
-
-        # Force last to have a time
-        last_triptime, last_stoptime = times.pop()
-        while not str(last_stoptime.arrival_time):
-            new_stoptime = last_triptime.copy_to_feed(feed, gtfs_trip, True)
-            if not new_stoptime:
-                last_stoptime.delete()
-                last_triptime, last_stoptime = times.pop()
-            else:
-                last_stoptime = new_stoptime
+        for triptime in self.triptime_set.exclude(
+                time='').exclude(tripstop__stop=None):
+            times.append([triptime, False])
+        times[0][1] = True
+        times[-1][1] = True
+        
+        for triptime, force_time in times:
+            triptime.copy_to_feed(feed, gtfs_trip, force_time)
 
 
 class TripTime(models.Model):
@@ -914,9 +930,8 @@ class TripTime(models.Model):
             return None
         gtfs_stop = self.tripstop.stop.copy_to_feed(feed)
         gtfs_stoptime, created = gtfs_trip.stoptime_set.get_or_create(
-            stop=gtfs_stop, defaults=dict(
-                arrival_time=time, departure_time=time,
-                stop_sequence=self.tripstop.seq))
+            stop=gtfs_stop, stop_sequence=self.tripstop.seq, defaults=dict(
+                arrival_time=time, departure_time=time))
         if force_time and not created:
             gtfs_stoptime.arrival_time=time
             gtfs_stoptime.departure_time=time

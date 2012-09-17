@@ -129,9 +129,11 @@ Pattern      123Ar            Adm/MemE
         TripDay.import_schedule(self.signup, 'test.txt')
         self.mox.VerifyAll()
         self.assert_expected_trip_object_counts()
-        ts0 = TripStop.objects.get(seq=0)
+        ts0, ts1, ts2 = TripStop.objects.all()
         self.assertEqual(ts0.stop, self.stop1)
         self.assertEqual(ts0.node, None)
+        self.assertEqual(ts2.stop, self.stop3)
+        self.assertEqual(ts2.node, self.node3)
 
     def test_import_schedule_sbl_is_just_nodes_two_candidates(self):
         '''
