@@ -341,6 +341,7 @@ class Stop(models.Model):
     lon = models.DecimalField(
         'Longitude', max_digits=13, decimal_places=8,
         help_text='WGS 84 longtitude of stop or station')
+    in_service = models.BooleanField()
 
     class Meta:
         unique_together = ('signup', 'stop_id')
@@ -364,10 +365,11 @@ class Stop(models.Model):
             lat = raw_lat[:-6] + '.' + raw_lat[-6:]
             raw_lon = str(record['Lon'])
             lon = raw_lon[:-6] + '.' + raw_lon[-6:]
+            in_service = record['InService']
             cls.objects.create(
                 signup=signup, stop_id=stop_id, stop_abbr=stop_abbr,
                 stop_name=stop_name, node_abbr=node_abbr, site_name=site_name,
-                lat=lat, lon=lon)
+                lat=lat, lon=lon, in_service=in_service)
             stop_cnt += 1
         logger.info('Parsed %d Stops.' % stop_cnt)
 
@@ -375,7 +377,7 @@ class Stop(models.Model):
         gtfs_stop, created = feed.stop_set.get_or_create(
             stop_id=self.stop_id, defaults=dict(
                 name=self.stop_name, lat=self.lat, lon=self.lon,
-                desc=self.site_name, code=self.stop_abbr, location_type=0))
+                desc=self.site_name, location_type=0))
         return gtfs_stop
 
 
@@ -841,7 +843,7 @@ class TripStop(models.Model):
 
             # Look for stops in the SignUp with the same ID
             stops = signup.stop_set.filter(
-                stop_abbr=stop_abbr).order_by('stop_id')
+                stop_abbr=stop_abbr, in_service=True).order_by('stop_id')
             if len(stops) == 1:
                 stop = stops[0]
             else:
