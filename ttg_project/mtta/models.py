@@ -387,7 +387,7 @@ class Node(models.Model):
     We don't have a direct database of nodes, but some stops are identified as
     nodes in the StopsBy* data.
     '''
-    stop = models.ForeignKey(Stop, related_name='nodes')
+    stops = models.ManyToManyField(Stop, related_name='nodes')
     node_id = models.IntegerField(db_index=True)
     abbr = models.CharField(max_length=8)
     name = models.CharField(max_length=50)
@@ -396,8 +396,7 @@ class Node(models.Model):
         return "%s-%s" % (self.node_id, self.abbr)
 
     class Meta:
-        unique_together = ('stop', 'node_id')
-        ordering = ('node_id', 'stop__stop_id')
+        ordering = ('node_id',)
 
 
 class StopByLine(models.Model):
@@ -447,8 +446,8 @@ class StopByLine(models.Model):
                 node_name = unicode(record['NodeName'], encoding='latin-1')
                 node_id = record['NodeID']
                 node, created = Node.objects.get_or_create(
-                    stop=stop, node_id=node_id, abbr=node_abbr,
-                    name=node_name)
+                    node_id=node_id, abbr=node_abbr, name=node_name)
+                node.stops.add(stop)
                 if created:
                     new_node_cnt += 1
             else:
@@ -516,8 +515,8 @@ class StopByPattern(models.Model):
                 node_name = unicode(record['NodeName'], encoding='latin-1')
                 node_id = record['NodeID']
                 node, created = Node.objects.get_or_create(
-                    stop=stop, node_id=node_id, abbr=node_abbr,
-                    name=node_name)
+                    node_id=node_id, abbr=node_abbr, name=node_name)
+                node.stops.add(stop)
                 if created:
                     new_node_cnt += 1
             else:

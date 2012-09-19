@@ -17,26 +17,27 @@ class TripDayTest(TestCase):
         self.stop1 = Stop.objects.create(
             signup=self.signup, stop_id=5498, stop_abbr='Arch124a',
             node_abbr='123ARCH', lon='-95.83969', lat='36.162776',
-            stop_name='E Archer St&N 124th E Ave/N 123Rd E')
+            stop_name='E Archer St&N 124th E Ave/N 123Rd E', in_service=True)
         self.stop2 = Stop.objects.create(
             signup=self.signup, stop_id=5440, stop_abbr='Adm106p',
             lat='36.160832', lon='-95.858432',
-            stop_name='E Admiral Pl&N 106th E Pl/S 106Th E')
+            stop_name='E Admiral Pl&N 106th E Pl/S 106Th E', in_service=True)
         self.stop3 = Stop.objects.create(
             signup=self.signup, stop_id=5478, stop_abbr='AdmMem',
             site_name='Phillips 66', node_abbr='ADM/MEME',
             lon='-95.887364', lat='36.160834',
-            stop_name='E Admiral Pl&N Memorial Dr/S Memori')
+            stop_name='E Admiral Pl&N Memorial Dr/S Memori', in_service=True)
         self.line100 = Line.objects.create(
             signup=self.signup, line_id=2893, line_abbr=100,
             line_name='Admiral', line_color=12910532, line_type='FX')
         self.line100dir0 = LineDirection.objects.create(
             line=self.line100, linedir_id=28930, name='To Downtown')
         self.node1 = Node.objects.create(
-            node_id=635, stop=self.stop1, abbr='123Ar', name='123rd E/Archer')
+            node_id=635, abbr='123Ar', name='123rd E/Archer')
+        self.node1.stops.add(self.stop1)
         self.node3 = Node.objects.create(
-            node_id=736, stop=self.stop3, abbr='Adm/MemE',
-            name='ADMIRAL PL/MEMORIAL P W-NW')
+            node_id=736, abbr='Adm/MemE', name='ADMIRAL PL/MEMORIAL P W-NW')
+        self.node3.stops.add(self.stop3)
         self.sbl1 = StopByLine.objects.create(
             linedir=self.line100dir0, stop=self.stop1, node=self.node1, seq=1)
         self.sbl2 = StopByLine.objects.create(
@@ -137,11 +138,11 @@ Pattern      123Ar            Adm/MemE
 
     def test_import_schedule_sbl_is_just_nodes_two_candidates(self):
         '''
-        The import succeeds if the StopByLine is just nodes, and a stop-only
-        column has two stop matches.  In this case, there is no assigned
-        stop, and it won't be exported
+        StopByPattern is just nodes, a stop-only column has two matches.
+        The import succeeds, but there is no assigned stop, and the column
+        won't be exported.
         
-        In Aug 2012 signup, 508 was just nodes, but stops were on 902
+        In Aug 2012 signup, 508 was just nodes, but some stops were ambiguous
         '''
         self.sbl2.delete()
         self.sbl3.seq = 2
@@ -150,7 +151,7 @@ Pattern      123Ar            Adm/MemE
             signup=self.signup, stop_id=self.stop2.stop_id + 1,
             stop_abbr=self.stop2.stop_abbr, site_name=self.stop2.site_name,
             lon=self.stop2.lon, lat=self.stop2.lat,
-            stop_name=self.stop2.stop_name)
+            stop_name=self.stop2.stop_name, in_service=True)
         
         mtta.models.mockable_open(
             'test.txt').AndReturn(StringIO.StringIO(self.schedule))
@@ -160,6 +161,31 @@ Pattern      123Ar            Adm/MemE
         self.assert_expected_trip_object_counts()
         ts1 = TripStop.objects.get(seq=1)
         self.assertEqual(ts1.stop, None)
+
+    def test_import_schedule_sbl_is_just_nodes_one_in_service_candidate(self):
+        '''
+        StopByPattern is nodes, a stop-only column has one in-service option.
+        The in-service stop is assigned, and the column will be exported.
+        
+        In Aug 2012 signup, 508 was just nodes, but some stops were ambiguous
+        '''
+        self.sbl2.delete()
+        self.sbl3.seq = 2
+        self.sbl3.save()
+        stop4 = Stop.objects.create(
+            signup=self.signup, stop_id=self.stop2.stop_id + 1,
+            stop_abbr=self.stop2.stop_abbr, site_name=self.stop2.site_name,
+            lon=self.stop2.lon, lat=self.stop2.lat,
+            stop_name=self.stop2.stop_name, in_service=False)
+
+        mtta.models.mockable_open(
+            'test.txt').AndReturn(StringIO.StringIO(self.schedule))
+        self.mox.ReplayAll()
+        TripDay.import_schedule(self.signup, 'test.txt')
+        self.mox.VerifyAll()
+        self.assert_expected_trip_object_counts()
+        ts1 = TripStop.objects.get(seq=1)
+        self.assertEqual(ts1.stop, self.stop2)
 
     def test_import_schedule_sbl_is_just_nodes(self):
         '''

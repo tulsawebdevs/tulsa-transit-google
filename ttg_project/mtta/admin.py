@@ -16,9 +16,9 @@ class LineDirectionAdmin(admin.ModelAdmin):
 
 
 class NodeAdmin(admin.ModelAdmin):
-    raw_id_fields = ('stop',)
-    search_fields = ('node_id', 'abbr', 'stop__stop_abbr', 'stop__node_abbr')
-    list_display = ('__unicode__', 'stop', 'name')
+    raw_id_fields = ('stops',)
+    search_fields = ('node_id', 'abbr', 'stops__stop_abbr', 'stops__node_abbr')
+    list_display = ('__unicode__', 'name')
 
 
 class PatternAdmin(admin.ModelAdmin):
