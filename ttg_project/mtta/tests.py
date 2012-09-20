@@ -10,10 +10,14 @@ import mtta.models
 
 
 class TripDayTest(TestCase):
-
+    
     def setUp(self):
         self.mox = mox.Mox()
         self.signup = SignUp.objects.create(name=SignUp._unset_name)
+        self.service = Service.objects.create(
+            signup=self.signup, service_id=1, monday=True, tuesday=True,
+            wednesday=True, thursday=True, friday=True, saturday=False,
+            sunday=False, start_date='2012-09-20', end_date='2013-12-31')
         self.stop1 = Stop.objects.create(
             signup=self.signup, stop_id=5498, stop_abbr='Arch124a',
             node_abbr='123ARCH', lon='-95.83969', lat='36.162776',
@@ -72,7 +76,8 @@ Pattern      123Ar            Adm/MemE
         self.mox.UnsetStubs()
     
     def assert_expected_trip_object_counts(self):
-        self.assertEqual(Service.objects.count(), 1)
+        self.assertEqual(
+            Service.objects.filter(signup=self.signup).count(), 1)
         self.assertEqual(TripDay.objects.count(), 1)
         self.assertEqual(TripStop.objects.count(), 3)
         self.assertEqual(Trip.objects.count(), 1)
@@ -85,7 +90,7 @@ Pattern      123Ar            Adm/MemE
         TripDay.import_schedule(self.signup, 'test.txt')
         self.mox.VerifyAll()
         self.assert_expected_trip_object_counts()
-        service = Service.objects.get()
+        service = Service.objects.get(signup=self.signup)
         self.assertEqual(service.service_id, 1)
         tripday = TripDay.objects.get()
         self.assertEqual(tripday.linedir, self.line100dir0)

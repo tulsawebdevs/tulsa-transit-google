@@ -1,3 +1,4 @@
+import datetime
 import logging
 import os
 
@@ -7,6 +8,7 @@ import dbfpy.dbf
 import shapefile
 
 from mtta.utils import haversine
+from multigtfs.models import Feed
 
 logger = logging.getLogger(__name__)
 
@@ -18,22 +20,9 @@ def mockable_open(path):
 class SignUp(models.Model):
     name = models.CharField(max_length=255)
     created = models.DateTimeField(auto_now_add=True)
+    feeds = models.ManyToManyField(Feed, through='SignupExports')
     _unset_name = '<unset>'
-    # TODO: Don't hardcode agency details
-    _agency_defaults = dict(
-        name='Tulsa Transit', url='http://www.tulsatransit.org',
-        timezone='America/Chicago', phone='(918) 582-2100', lang='en',
-        fare_url='http://tulsatransit.org/fares-passes/')
-    _calendar_dates = (
-        (1, '2012-11-22', 2),
-        (1, '2012-11-23', 2),
-        (2, '2012-11-23', 1),
-        (1, '2012-12-24', 2),
-        (2, '2012-12-24', 1),
-        (1, '2012-12-25', 2),
-        (1, '2013-01-01', 2),
-    )
-    
+
     def import_folder(self, folder, stdout=None):
         data_file = dict()
         names = (
@@ -64,6 +53,8 @@ class SignUp(models.Model):
                 raise Exception('No %s found in path %s' % (key, folder))
         if not stop_trips:
             raise Exception('No schedules found in path %s' % folder)
+        if not self.service_set.exists():
+            Service.create_from_defaults(self)
         Line.import_dbf(self, data_file['lines.dbf'])
         Pattern.import_shp(self, data_file['patterns.shp'])
         Stop.import_dbf(self, data_file['stops.dbf'])
@@ -73,19 +64,41 @@ class SignUp(models.Model):
             TripDay.import_schedule(self, path)
 
     def copy_to_feed(self):
-        from multigtfs.models import Feed
         feed = Feed.objects.create(name=self.name)
-        feed.agency_set.get_or_create(defaults=self._agency_defaults)
+        signup_export = SignupExports.objects.create(
+            signup=self, feed=feed, started=feed.created)
+        agency = AgencyInfo.objects.get(pk=1)
+        agency.copy_to_feed(feed)
         for line in self.line_set.all():
             logger.info('Exporting data for line %s...' % line)
             line.copy_to_feed(feed)
-        for service_id, date, etype in self._calendar_dates:
-            service = feed.service_set.get(service_id=service_id)
-            service.servicedate_set.create(date=date, exception_type=etype)
+        signup_export.finished = datetime.datetime.now()
         return feed
 
     def __unicode__(self):
         return "%s-%s" % (self.id, self.name or '(No Name)')
+
+
+class SignupExports(models.Model):
+    signup = models.ForeignKey(SignUp)
+    feed = models.ForeignKey(Feed)
+    started = models.DateTimeField()
+    finished = models.DateTimeField(null=True, blank=True)
+
+
+class AgencyInfo(models.Model):
+    '''MTTA information used by GTFS feed'''
+    name = models.CharField(max_length=20)
+    url = models.URLField()
+    timezone = models.CharField(max_length=20)
+    lang = models.CharField(max_length=2)
+    phone = models.CharField(max_length=20)
+    fare_url = models.URLField()
+
+    def copy_to_feed(self, feed):
+        feed.agency_set.get_or_create(
+            name=self.name, url=self.url, timezone=self.timezone,
+            lang=self.lang, phone=self.phone, fare_url=self.fare_url)
 
 
 class Line(models.Model):
@@ -162,7 +175,7 @@ class Line(models.Model):
         else:
             text_color = 'ffffff'
         return text_color
-    
+
     def short_name(self):
         return self.line_abbr.replace('FLEX', 'FX').replace('SFLX', 'SF')
 
@@ -263,11 +276,11 @@ class Pattern(models.Model):
             for seq, (lat, lon) in enumerate(self.get_points()):
                 gtfs_shape.points.create(sequence=seq, lat=lat, lon=lon)
         return gtfs_shape
-    
-    def get_points(self):        
+
+    def get_points(self):
         def node_dist(node1, node2):
             return haversine(node1[0], node1[1], node2[0], node2[1])
-        
+
         if not self.fixed_pattern:
             # Create line
             line = []
@@ -324,7 +337,7 @@ class Pattern(models.Model):
                     first_nodes = (node1, node2)
             self.fixed_pattern = line
             self.save()
-        return self.fixed_pattern        
+        return self.fixed_pattern
 
 
 class Stop(models.Model):
@@ -533,17 +546,34 @@ class StopByPattern(models.Model):
 
 
 class Service(models.Model):
-    signup = models.ForeignKey(SignUp)
+    signup = models.ForeignKey(SignUp, null=True, blank=True)
     service_id = models.IntegerField(
         choices=((1, 'Weekday'), (2, 'Saturday')))
-    _service_defaults = {
-        1: dict(monday=True, tuesday=True, wednesday=True, thursday=True,
-                friday=True, saturday=False, sunday=False,
-                start_date='2012-08-01', end_date='2013-08-01'),
-        2: dict(monday=False, tuesday=False, wednesday=False, thursday=False,
-                friday=False, saturday=True, sunday=False,
-                start_date='2012-08-01', end_date='2013-08-01')
-    }
+    monday = models.BooleanField()
+    tuesday = models.BooleanField()
+    wednesday = models.BooleanField()
+    thursday = models.BooleanField()
+    friday = models.BooleanField()
+    saturday = models.BooleanField()
+    sunday = models.BooleanField()
+    start_date = models.DateField()
+    end_date = models.DateField()
+
+    @classmethod
+    def create_from_defaults(cls, signup):
+        for default in cls.objects.filter(signup=None):
+            service = cls.objects.create(
+                signup=signup, service_id=default.service_id,
+                monday=default.monday, tuesday=default.tuesday,
+                wednesday=default.wednesday, thursday=default.thursday,
+                friday=default.friday, saturday=default.saturday,
+                sunday=default.sunday, start_date=default.start_date,
+                end_date=default.end_date)
+            for def_exception in default.serviceexception_set.filter(
+                    date__gte=default.start_date, date__lte=default.end_date):
+                service.serviceexception_set.create(
+                    date=def_exception.date,
+                    exception_type=def_exception.exception_type)
 
     class Meta:
         unique_together = ordering = ('signup', 'service_id')
@@ -552,11 +582,30 @@ class Service(models.Model):
         return '%s-%s' % (self.service_id, self.get_service_id_display())
 
     def copy_to_feed(self, feed):
-        # TODO: Don't hardcode these
         gtfs_service, created = feed.service_set.get_or_create(
-            service_id=str(self.service_id),
-            defaults=self._service_defaults[self.service_id])
+            service_id=str(self.service_id), defaults=dict(
+                monday=self.monday, tuesday=self.tuesday,
+                wednesday=self.wednesday, thursday=self.thursday,
+                friday=self.friday, saturday=self.saturday,
+                sunday=self.sunday, start_date=self.start_date,
+                end_date=self.end_date))
+        for exception in self.serviceexception_set.filter(
+                date__gte=self.start_date, date__lte=self.end_date):
+            exception.copy_to_feed(feed, gtfs_service)
         return gtfs_service
+
+
+class ServiceException(models.Model):
+    service = models.ForeignKey(Service)
+    date = models.DateField()
+    exception_type = models.IntegerField(
+        choices=((1, 'Add Service'), (2, 'Remove Service')))
+
+    def copy_to_feed(self, feed, gtfs_service):
+        servicedate_set = gtfs_service.servicedate_set
+        gtfs_service_exception, created = servicedate_set.get_or_create(
+            service=gtfs_service, date=self.date,
+            exception_type=self.exception_type)
 
 
 class TripDay(models.Model):
@@ -613,8 +662,7 @@ class TripDay(models.Model):
                     if signup.name == SignUp._unset_name:
                         signup.name = signup_name
                         signup.save()
-                    service, created = Service.objects.get_or_create(
-                        signup=signup, service_id=service_id)
+                    service = signup.service_set.get(service_id=service_id)
                     possible_names = (
                         line_name, line_name + 'FLEX', line_name + 'FLX')
                     line = signup.line_set.get(line_abbr__in=possible_names)
@@ -883,7 +931,7 @@ class Trip(models.Model):
             trip_id=trip_id, defaults=dict(
                 headsign=linedir.name, direction=direction, shape=gtfs_shape))
         gtfs_trip.services.add(gtfs_service)
-        
+
         no_time = self.triptime_set.filter(time='')
         if no_time.exists():
             logger.info('On Trip %s, skipping %d stops with no time.' %
@@ -892,7 +940,7 @@ class Trip(models.Model):
         if no_stop.exists():
             logger.info('On Trip %s, skipping %d stops with ambiguous stop'
                         ' abbreviations.' % (self, no_stop.count()))
-        
+
         # Gather the valid trip times
         times = []
         for triptime in self.triptime_set.exclude(
@@ -900,7 +948,7 @@ class Trip(models.Model):
             times.append([triptime, False])
         times[0][1] = True
         times[-1][1] = True
-        
+
         for triptime, force_time in times:
             triptime.copy_to_feed(feed, gtfs_trip, force_time)
 

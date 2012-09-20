@@ -1,0 +1,100 @@
+[{
+    "model": "mtta.agencyinfo",
+    "pk": 1,
+    "fields": {
+        "name": "Tulsa Transit",
+        "url": "http://www.tulsatransit.org",
+        "timezone": "America/Chicago",
+        "phone": "(918) 582-2100",
+        "lang": "en",
+        "fare_url": "http://tulsatransit.org/fares-passes/"
+    }
+},{
+    "model": "mtta.service",
+    "pk": 1,
+    "fields": {
+        "signup": null,
+        "service_id": 1,
+        "monday": true,
+        "tuesday": true,
+        "wednesday": true,
+        "thursday": true,
+        "friday": true,
+        "saturday": false,
+        "sunday": false,
+        "start_date": "2012-08-01",
+        "end_date": "2013-08-01"
+    }
+},{
+    "model": "mtta.service",
+    "pk": 2,
+    "fields": {
+        "signup": null,
+        "service_id": 2,
+        "monday": false,
+        "tuesday": false,
+        "wednesday": false,
+        "thursday": false,
+        "friday": false,
+        "saturday": true,
+        "sunday": true,
+        "start_date": "2012-08-01",
+        "end_date": "2013-08-01"
+    }
+}, {
+    "model": "mtta.serviceexception",
+    "pk": 1,
+    "fields": {
+        "service": 1,
+        "date": "2012-11-22",
+        "exception_type": 2
+    }
+}, {
+    "model": "mtta.serviceexception",
+    "pk": 2,
+    "fields": {
+        "service": 1,
+        "date": "2012-11-23",
+        "exception_type": 2
+    }    
+}, {
+    "model": "mtta.serviceexception",
+    "pk": 3,
+    "fields": {
+        "service": 2,
+        "date": "2012-11-23",
+        "exception_type": 1
+    }    
+}, {
+    "model": "mtta.serviceexception",
+    "pk": 4,
+    "fields": {
+        "service": 1,
+        "date": "2012-12-24",
+        "exception_type": 2
+    }    
+}, {
+    "model": "mtta.serviceexception",
+    "pk": 5,
+    "fields": {
+        "service": 2,
+        "date": "2012-12-24",
+        "exception_type": 1
+    }    
+}, {
+    "model": "mtta.serviceexception",
+    "pk": 6,
+    "fields": {
+        "service": 1,
+        "date": "2012-12-25",
+        "exception_type": 2
+    }    
+}, {
+    "model": "mtta.serviceexception",
+    "pk": 7,
+    "fields": {
+        "service": 1,
+        "date": "2013-01-01",
+        "exception_type": 2
+    }
+}]
