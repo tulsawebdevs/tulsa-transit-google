@@ -400,6 +400,7 @@ class Node(models.Model):
     We don't have a direct database of nodes, but some stops are identified as
     nodes in the StopsBy* data.
     '''
+    signup = models.ForeignKey(SignUp)
     stops = models.ManyToManyField(Stop, related_name='nodes')
     node_id = models.IntegerField(db_index=True)
     abbr = models.CharField(max_length=8)
