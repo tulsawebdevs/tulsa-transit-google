@@ -59,7 +59,7 @@ class StopByPatternAdmin(admin.ModelAdmin):
     raw_id_fields = ('stop', 'linedir', 'pattern', 'node')
     search_fields = (
         'stop__stop_id', 'node__node_id', 'stop__stop_abbr',
-        'stop__node_abbr', 'node__node_abbr')
+        'stop__node_abbr', 'node__abbr')
     list_filter = ('stop__signup', 'linedir__line',)
     list_display = ('__unicode__', 'pattern', 'seq', 'line', 'stop', 'node')
     
