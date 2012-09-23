@@ -119,6 +119,7 @@ class Line(models.Model):
 
     @classmethod
     def import_dbf(cls, signup, path):
+        # TODO: Combine NNNFLEX and NNNSFLX into a single line
         logger.info('Parsing Lines from %s...' % path)
         db_f = dbfpy.dbf.Dbf(path, readOnly=True)
         line_cnt, linedir_cnt = 0, 0
@@ -177,7 +178,7 @@ class Line(models.Model):
         return text_color
 
     def short_name(self):
-        return self.line_abbr.replace('FLEX', 'FX').replace('SFLX', 'SF')
+        return self.line_abbr.replace('FLEX', 'FL').replace('SFLX', 'SF')
 
     def copy_to_feed(self, feed):
         gtfs_route, created = feed.route_set.get_or_create(
@@ -459,7 +460,7 @@ class StopByLine(models.Model):
                 node_abbr = record['NodeAbbr']
                 node_name = unicode(record['NodeName'], encoding='latin-1')
                 node_id = record['NodeID']
-                node, created = Node.objects.get_or_create(
+                node, created = signup.node_set.get_or_create(
                     node_id=node_id, abbr=node_abbr, name=node_name)
                 node.stops.add(stop)
                 if created:
@@ -528,7 +529,7 @@ class StopByPattern(models.Model):
                 node_abbr = record['NodeAbbr']
                 node_name = unicode(record['NodeName'], encoding='latin-1')
                 node_id = record['NodeID']
-                node, created = Node.objects.get_or_create(
+                node, created = signup.node_set.get_or_create(
                     node_id=node_id, abbr=node_abbr, name=node_name)
                 node.stops.add(stop)
                 if created:
@@ -760,6 +761,7 @@ class TripStop(models.Model):
     node = models.ForeignKey(Node, null=True, blank=True)
     node_abbr = models.CharField(max_length=8, blank=True)
     seq = models.IntegerField()
+    scheduled = models.BooleanField(help_text='Stop is a scheduled stop.')
 
     class Meta:
         unique_together = ordering = ('tripday', 'seq')
@@ -811,12 +813,22 @@ class TripStop(models.Model):
                 break
         assert data_col == 1 or data_col == 3
         data_bounds = field_bounds[data_col:]
-        # The rest are node/stop columns, but we need to match
-        #  them to data.  First, let's test if StopsByLine is
-        #  accurate
-        stops_by_line_matches = True
+        data_cols = columns[data_col:]
+        line_type = tripday.linedir.line.line_type
+        if line_type == 'FX':
+            tripstops = cls._parse_normal_columns(tripday, data_cols)
+        else:
+            assert line_type == 'FL'
+            tripstops = cls._parse_flex_columns(tripday, data_cols)
+        return pattern_bounds, data_bounds, tripstops
+    
+    @classmethod
+    def _parse_normal_columns(cls, tripday, col_lines):
+        '''Parse the node/stop columns on a normal line'''
+        linedir = tripday.linedir
         tripstop_params = []
-        for seq, abbrs in enumerate(columns[data_col:]):
+        stops_by_line_matches = True
+        for seq, abbrs in enumerate(col_lines):
             node_abbr, stop_abbr = abbrs
             sbl = linedir.stopbyline_set.get(seq=seq+1)
             node = sbl.node
@@ -838,7 +850,7 @@ class TripStop(models.Model):
                     break
             tripstop_params.append(
                 dict(stop=stop, node=node, stop_abbr=stop_abbr,
-                     node_abbr=node_abbr))
+                     node_abbr=node_abbr, scheduled=(node is not None)))
         if stops_by_line_matches:
             # This is the best way to match times to stops
             tripstops = []
@@ -846,67 +858,119 @@ class TripStop(models.Model):
                 params['tripday'] = tripday
                 params['seq'] = seq
                 tripstops.append(TripStop.objects.create(**params))
-            return pattern_bounds, data_bounds, tripstops
-
-        # Another possibility is that StopsByLine is just the nodes.
-        #  If this is the case, then guess at stops
-        #  Try for a node match, then for a stop match
-        logger.info('Trying nodes-by-line strategy...')
-
-        # Test the abbreviations against the candidates
-        node_seq = 1
+            return tripstops
+        else:
+            raise Exception('Parsing a normal line failed!')
+    
+    @classmethod
+    def _parse_flex_columns(cls, tripday, col_lines):
+        '''Parse the node/stop columns on a flex line'''
+        linedir = tripday.linedir
+        signup = linedir.line.signup
+        # Find the timing nodes first
+        sbls = list(linedir.stopbyline_set.order_by('seq'))
         tripstop_params = []
-        for seq, abbrs in enumerate(columns[data_col:]):
+        for seq, abbrs in enumerate(col_lines):
             node_abbr, stop_abbr = abbrs
+            params = dict(
+                stop_abbr=stop_abbr, node_abbr=node_abbr, scheduled=False)
             # Look for the node in StopByLine
             if node_abbr:
-                sbl = linedir.stopbyline_set.get(seq=node_seq)
-                node = sbl.node
-                stop = sbl.stop
-                node_match = (node and node_abbr == node.abbr)
-                stop_node_match = (
-                    stop and node_abbr.lower() == stop.node_abbr.lower())
-                any_node_match = node_match or stop_node_match
-                stop_match = (stop and stop_abbr == stop.stop_abbr)
-                if stop_node_match and not node_match:
-                    logger.info(
-                        'On linedir %s seq %s, node %s did not match "%s" but'
-                        ' stop %s did' %
-                        (linedir, seq, node, node_abbr, sbl.stop))
-                if not any_node_match:
-                    logger.info(
-                        'On linedir %s seq %s, node %s did not match "%s" and'
-                        ' stop %s did not either' %
-                        (linedir, seq, node, node_abbr, sbl.stop))
-                if not stop_match:
-                    logger.info(
-                        'On linedir %s seq %s, stop %s did not match "%s"' %
-                        (linedir, seq, stop, stop_abbr))
-                if any_node_match and stop_match:
-                    if not node_match:
-                        node = None
-                    tripstop_params.append(dict(stop=sbl.stop, node=node))
-                    node_seq += 1
-                    continue
-
-            # Look for stops in the SignUp with the same ID
-            stops = signup.stop_set.filter(
-                stop_abbr=stop_abbr, in_service=True).order_by('stop_id')
-            if len(stops) == 1:
-                stop = stops[0]
+                for sbl in sbls:
+                    node = sbl.node
+                    stop = sbl.stop
+                    if node and node_abbr == node.abbr:
+                        params.update(dict(
+                            stop=stop, node=node, scheduled=True))
+                    elif stop and node_abbr.lower() == stop.node_abbr.lower():
+                        params.update(dict(
+                            stop=stop, node=None, scheduled=True))
+                    elif stop and stop_abbr == stop.stop_abbr:
+                        params.update(dict(stop=stop, scheduled=True))
+                        if stop.nodes.count() == 1:
+                            node = stop.nodes.get()
+                            logger.warning(
+                                "On tripday %s, no node match for '%s', but"
+                                " stop '%s' matches. Using its node '%s'." %
+                                (tripday, node_abbr, stop, node))
+                            params['node'] = node
+                        elif stop.nodes.exists():
+                            logger.warning(
+                                "On tripday %s, no node match for '%s', but"
+                                " stop '%s' matches.  It has multiple nodes"
+                                " (%s), so leaving node empty." %
+                                (tripday, node_abbr, stop, stop.nodes.all()))
+                        else:
+                            logger.warning(
+                                "On tripday %s, no node match for '%s', but"
+                                " stop '%s' matches.  It has no nodes, so"
+                                " leaving node empty." %
+                                (tripday, node_abbr, stop))                            
+                    else:
+                        continue
+                    sbls.remove(sbl)
+                    break
+            tripstop_params.append(params)
+        if sbls:
+            # We have unmatched scheduled points.  See if the number of
+            # StopsByLine left matches the number of unscheduled nodes
+            unscheduled_nodes = []
+            for param in tripstop_params:
+                if param['node_abbr'] and not param['scheduled']:
+                    unscheduled_nodes.append(param)
+            if len(unscheduled_nodes) == len(sbls):
+                for un, sbl in zip(unscheduled_nodes, sbls):
+                    logger.warning(
+                        "On tripday %s, no match for timing node %s (stop %s)"
+                        " in schedule.  Assiging to unscheduled node %s"
+                        " (stop %s)." % 
+                            (tripday, sbl.node, sbl.stop, un['node_abbr'],
+                             un['stop_abbr']))
+                    un['node'] = sbl.node
+                    un['stop'] = sbl.stop
+                    un['scheduled'] = True
+                    sbls.remove(sbl)
             else:
+                for sbl in sbls:
+                    logger.error(
+                        "On tripday %s, couldn't find timing node %s (stop"
+                        " %s) in schedule." % (tripday, sbl.node, sbl.stop))
+        # Now for the non-timing stops and nodes
+        for seq, params in enumerate(tripstop_params):
+            if 'stop' not in params:
+                stop_abbr = params['stop_abbr']
                 stop = None
-                logger.warning(
-                    'At stop %s, %d stops found for stop "%s"'
-                    ' - Leaving stop unassigned' %
-                    (seq, len(stops), stop_abbr))
-            tripstop_params.append(dict(stop=stop, stop_abbr=stop_abbr))
+                stops = signup.stop_set.filter(
+                    stop_abbr=stop_abbr, in_service=True).order_by('stop_id')
+                if len(stops) == 1:
+                    stop = stops[0]
+                elif len(stops) > 1:
+                    candidates = []
+                    node_abbr = params['node_abbr']
+                    for s in stops:
+                        if s.node_abbr.lower() == node_abbr.lower():
+                            candidates.append(s)
+                        elif s.nodes.filter(abbr=node_abbr).count() == 1:
+                            candidates.append(s.nodes.get(abbr=node_abbr))
+                    if len(candidates) == 1:
+                        stop = candidates[0]
+                if stop:
+                    params['stop'] = stop
+                    if stop.nodes.count() == 1:
+                        params['node'] = stop.nodes.get()
+                else:
+                    logger.warning(
+                        "On tripday %s, at trip stop %s, %d stops found for"
+                        " stop abbreviation '%s'. Leaving stop unassigned" %
+                        (tripday, seq, len(stops), stop_abbr))
+                
+        # Write to database
         tripstops = []
         for seq, params in enumerate(tripstop_params):
             params['tripday'] = tripday
             params['seq'] = seq
             tripstops.append(TripStop.objects.create(**params))
-        return pattern_bounds, data_bounds, tripstops
+        return tripstops
 
 
 class Trip(models.Model):
@@ -971,7 +1035,7 @@ class TripTime(models.Model):
         if not self.tripstop.stop:
             logger.info('Skipping TripTime "%s" - no stop' % self)
             return
-        if self.time and (self.tripstop.node_abbr or force_time):
+        if self.time and (self.tripstop.scheduled or force_time):
             time = self.time
         else:
             time = None
