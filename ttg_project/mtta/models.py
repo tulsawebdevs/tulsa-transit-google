@@ -1,3 +1,4 @@
+from collections import defaultdict
 import datetime
 import logging
 import os
@@ -13,8 +14,32 @@ from multigtfs.models import Feed
 logger = logging.getLogger(__name__)
 
 
-def mockable_open(path):
-    return open(path)
+def _mockable_open(path, mode=None):
+    return open(path, mode)
+
+
+def _force_to_file(obj):
+    '''Force to a file-like object
+
+    Strings are treated like file paths
+    None are returned
+    Other objects should already have a 'read' attribute.
+    '''
+    if isinstance(obj, basestring):
+        name = obj
+    elif hasattr(obj, 'name'):
+        name = obj.name
+    elif obj is None:
+        return None
+    else:
+        name = '<stream>'
+    if hasattr(obj, 'read'):
+        filelike = obj
+    else:
+        filelike = _mockable_open(obj, 'rb')
+    if not hasattr(filelike, 'name'):
+        filelike.name = name
+    return filelike
 
 
 class SignUp(models.Model):
@@ -22,46 +47,67 @@ class SignUp(models.Model):
     created = models.DateTimeField(auto_now_add=True)
     feeds = models.ManyToManyField(Feed, through='SignupExports')
     _unset_name = '<unset>'
+    _data_file_names = (
+        ('lines', 'line'),
+        ('patterns', 'pattern'),
+        ('stops', 'stop'),
+        ('stopsbyline',),
+        ('stopsbypattern',),
+    )
 
-    def import_folder(self, folder, stdout=None):
-        data_file = dict()
-        names = (
-            ('lines.dbf', 'line.dbf'),
-            ('patterns.shp', 'pattern.shp'),
-            ('stops.dbf', 'stop.dbf'),
-            ('stopsbyline.dbf',),
-            ('stopsbypattern.dbf',),
-        )
+    def import_folder(self, folder):
+        data_files = defaultdict(dict)
         stop_trips = []
+        stop_trips_start = 'Stop Trips'
         for path, dirs, files in os.walk(folder):
             for f in files:
                 full_path = os.path.abspath(os.path.join(path, f))
-                name = os.path.split(full_path)[-1].lower()
-                for nameset in names:
+                full_name = os.path.split(full_path)[-1].lower()
+                name, ext = os.path.splitext(full_name)
+                ext = ext.replace('.', '')
+                for nameset in self._data_file_names:
                     if name in nameset:
-                        data_file[nameset[0]] = full_path
-                if name.endswith('.txt'):
-                    key_string = 'Stop Trips'
+                        data_files[nameset[0]][ext] = full_path
+                if ext == 'txt':
                     with open(full_path, 'r') as candidate:
-                        first_bits = candidate.read(len(key_string))
-                    if (first_bits == key_string):
+                        first_bits = candidate.read(len(stop_trips_start))
+                    if (first_bits == stop_trips_start):
                         stop_trips.append(full_path)
 
-        for nameset in names:
+        for nameset in self._data_file_names:
             key = nameset[0]
-            if key not in data_file.keys():
+            if key not in data_files.keys():
                 raise Exception('No %s found in path %s' % (key, folder))
         if not stop_trips:
             raise Exception('No schedules found in path %s' % folder)
+        self._import(data_files, stop_trips)
+
+    def _import(self, data_files, stop_trips):
+        '''Import a set of ESRI Shapfiles and Stop Trip schedules'''
+
+        # Get the important parts, so we'll raise a KeyError early
+        lines_dbf = data_files['lines']['dbf']
+        patterns_dbf = data_files['patterns']['dbf']
+        patterns_shp = data_files['patterns']['shp']
+        if 'shx' in data_files['patterns']:
+            patterns_shx = data_files['patterns']['shx']
+        else:
+            patterns_shx = None
+        stops_dbf = data_files['stops']['dbf']
+        stopsbyline_dbf = data_files['stopsbyline']['dbf']
+        stopsbypattern_dbf = data_files['stopsbypattern']['dbf']
+
+        # Run the model-specific imports
         if not self.service_set.exists():
             Service.create_from_defaults(self)
-        Line.import_dbf(self, data_file['lines.dbf'])
-        Pattern.import_shp(self, data_file['patterns.shp'])
-        Stop.import_dbf(self, data_file['stops.dbf'])
-        StopByLine.import_dbf(self, data_file['stopsbyline.dbf'])
-        StopByPattern.import_dbf(self, data_file['stopsbypattern.dbf'])
-        for path in stop_trips:
-            TripDay.import_schedule(self, path)
+        Line.import_dbf(self, lines_dbf)
+        Pattern.import_shp(
+            self, dbf=patterns_dbf, shp=patterns_shp, shx=patterns_shx)
+        Stop.import_dbf(self, stops_dbf)
+        StopByLine.import_dbf(self, stopsbyline_dbf)
+        StopByPattern.import_dbf(self, stopsbypattern_dbf)
+        for schedule in stop_trips:
+            TripDay.import_schedule(self, schedule)
 
     def copy_to_feed(self):
         feed = Feed.objects.create(name=self.name)
@@ -118,9 +164,10 @@ class Line(models.Model):
         return "%s-%s" % (self.line_id, self.line_abbr)
 
     @classmethod
-    def import_dbf(cls, signup, path):
-        logger.info('Parsing Lines from %s...' % path)
-        db_f = dbfpy.dbf.Dbf(path, readOnly=True)
+    def import_dbf(cls, signup, path_or_file):
+        dbf_file = _force_to_file(path_or_file)
+        logger.info('Parsing Lines from %s...' % dbf_file.name)
+        db_f = dbfpy.dbf.Dbf(dbf_file, readOnly=True)
         line_cnt, linedir_cnt = 0, 0
         for record in db_f:
             line_id = record['LineID']
@@ -223,9 +270,15 @@ class Pattern(models.Model):
         return "%s-%s" % (self.pattern_id, self.name)
 
     @classmethod
-    def import_shp(cls, signup, path):
-        logger.info('Parsing Pattern Shapes from %s...' % path)
-        sf = shapefile.Reader(path)
+    def import_shp(cls, signup, dbf, shp, shx=None):
+        dbf_file = _force_to_file(dbf)
+        shp_file = _force_to_file(shp)
+        shx_file = _force_to_file(shx)
+        logger.info('Parsing Pattern Shapes (dbf=%s, shp=%s, %s)' %
+            (dbf_file.name, shp_file.name,
+             ('shx=%s' %shx_file.name) if shx_file else 'no shx'))
+        sf = shapefile.Reader(
+            dbf=dbf_file, shp=shp_file, shx=shx_file)
         assert sf.shapeType == 3  # PolyLine
         shapes = sf.shapes()
         PATTERN_ID_FIELD = 1
@@ -364,9 +417,10 @@ class Stop(models.Model):
         return "%s-%s" % (self.stop_id, self.stop_abbr)
 
     @classmethod
-    def import_dbf(cls, signup, path):
-        logger.info('Parsing Stops from %s...' % path)
-        db_f = dbfpy.dbf.Dbf(path, readOnly=True)
+    def import_dbf(cls, signup, path_or_file):
+        dbf_file = _force_to_file(path_or_file)
+        logger.info('Parsing Stops from %s...' % dbf_file.name)
+        db_f = dbfpy.dbf.Dbf(dbf_file, readOnly=True)
         stop_cnt = 0
         for record in db_f:
             stop_id = record['StopID']
@@ -428,9 +482,10 @@ class StopByLine(models.Model):
         return '%s-%02d' % (self.linedir.linedir_id, self.seq)
 
     @classmethod
-    def import_dbf(cls, signup, path):
-        logger.info('Parsing Stops->Line from %s...' % path)
-        db_f = dbfpy.dbf.Dbf(path, readOnly=True)
+    def import_dbf(cls, signup, path_or_file):
+        dbf_file = _force_to_file(path_or_file)
+        logger.info('Parsing Stops->Line from %s...' % dbf_file.name)
+        db_f = dbfpy.dbf.Dbf(dbf_file, readOnly=True)
         sxl_cnt, node_cnt, new_node_cnt, stop_cnt = 0, 0, 0, 0
         for record in db_f:
             stop_id = record['StopID']
@@ -491,9 +546,10 @@ class StopByPattern(models.Model):
         return '%s-%02d' % (self.pattern.pattern_id, self.seq)
 
     @classmethod
-    def import_dbf(cls, signup, path):
-        logger.info('Parsing Stops->Pattern from %s...' % path)
-        db_f = dbfpy.dbf.Dbf(path, readOnly=True)
+    def import_dbf(cls, signup, path_or_file):
+        dbf_file = _force_to_file(path_or_file)
+        logger.info('Parsing Stops->Pattern from %s...' % dbf_file.name)
+        db_f = dbfpy.dbf.Dbf(dbf_file, readOnly=True)
         sxl_cnt, node_cnt, new_node_cnt, stop_cnt = 0, 0, 0, 0
         for record in db_f:
             stop_id = record['StopID']
@@ -621,8 +677,9 @@ class TripDay(models.Model):
         return '%s-%s' % (self.linedir.linedir_id, self.service.service_id)
 
     @classmethod
-    def import_schedule(cls, signup, path):
-        logger.info('Parsing Trips from %s...' % path)
+    def import_schedule(cls, signup, path_or_file):
+        schedule = _force_to_file(path_or_file)
+        logger.info('Parsing Trips from %s...' % schedule.name)
 
         in_intro = 0  # Make sure we're in a Stop Trips file
         in_meta = 1   # Get Line and Service, fix SignUp name
@@ -636,7 +693,7 @@ class TripDay(models.Model):
         meta = dict()
 
         tripday_cnt, tripstop_cnt, trip_cnt, triptimes_cnt = 0, 0, 0, 0
-        for linenum, linein in enumerate(mockable_open(path).readlines()):
+        for linenum, linein in enumerate(schedule.readlines()):
             linein = linein.rstrip()
             if phase == in_intro:
                 # Make sure we're in a Stop Trips file

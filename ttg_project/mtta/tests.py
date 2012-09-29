@@ -24,7 +24,7 @@ class TripDayTest(TestCase):
         self.patterns = dict()
         self.stops = dict()
         self.nodes = dict()
-        self.mox.StubOutWithMock(mtta.models, 'mockable_open')
+        self.mox.StubOutWithMock(mtta.models, '_mockable_open')
 
     def tearDown(self):
         self.mox.UnsetStubs()
@@ -222,8 +222,8 @@ Pattern    DAS1             6BUE      11PE   11Uti               WHM
 
     def test_import_100_basic(self):
         self.setup_100()
-        mtta.models.mockable_open(
-            '100.txt').AndReturn(StringIO.StringIO(self.schedules['100']))
+        mtta.models._mockable_open('100.txt', 'rb').AndReturn(
+            StringIO.StringIO(self.schedules['100']))
         self.mox.ReplayAll()
         TripDay.import_schedule(self.signup, '100.txt')
         self.mox.VerifyAll()
@@ -277,8 +277,8 @@ Pattern    DAS1             6BUE      11PE   11Uti               WHM
         stop1.node_abbr = '123Ar'
         stop1.save()
         StopByLine.objects.filter(stop=stop1).update(node=None)
-        mtta.models.mockable_open(
-            '100.txt').AndReturn(StringIO.StringIO(self.schedules['100']))
+        mtta.models._mockable_open('100.txt', 'rb').AndReturn(
+            StringIO.StringIO(self.schedules['100']))
         self.mox.ReplayAll()
         TripDay.import_schedule(self.signup, '100.txt')
         self.mox.VerifyAll()
@@ -311,8 +311,8 @@ Pattern    DAS1             6BUE      11PE   11Uti               WHM
             stop_abbr=stop2.stop_abbr, site_name=stop2.site_name,
             lon=stop2.lon, lat=stop2.lat, stop_name=stop2.stop_name,
             in_service=True)
-        mtta.models.mockable_open(
-            '100.txt').AndReturn(StringIO.StringIO(self.schedules['100']))
+        mtta.models._mockable_open('100.txt', 'rb').AndReturn(
+            StringIO.StringIO(self.schedules['100']))
         self.mox.ReplayAll()
         TripDay.import_schedule(self.signup, '100.txt')
         self.mox.VerifyAll()
@@ -342,8 +342,8 @@ Pattern    DAS1             6BUE      11PE   11Uti               WHM
             lon=stop2.lon, lat=stop2.lat, stop_name=stop2.stop_name,
             in_service=False)
 
-        mtta.models.mockable_open(
-            '100.txt').AndReturn(StringIO.StringIO(self.schedules['100']))
+        mtta.models._mockable_open('100.txt', 'rb').AndReturn(
+            StringIO.StringIO(self.schedules['100']))
         self.mox.ReplayAll()
         TripDay.import_schedule(self.signup, '100.txt')
         self.mox.VerifyAll()
@@ -366,8 +366,8 @@ Pattern    DAS1             6BUE      11PE   11Uti               WHM
         StopByPattern.objects.filter(stop=stop2).delete()
         stop3 = self.stops[5478]
         StopByLine.objects.filter(stop=stop3).update(seq=2)
-        mtta.models.mockable_open(
-            '100.txt').AndReturn(StringIO.StringIO(self.schedules['100']))
+        mtta.models._mockable_open('100.txt', 'rb').AndReturn(
+            StringIO.StringIO(self.schedules['100']))
         self.mox.ReplayAll()
         TripDay.import_schedule(self.signup, '100.txt')
         self.mox.VerifyAll()
@@ -401,8 +401,8 @@ Pattern    DAS1             6BUE      11PE   11Uti               WHM
         stop3 = self.stops[5478]
         StopByLine.objects.filter(stop=stop3).update(seq=2)
         schedule = self.schedules['100'].replace('Adm/MemE', 'ADMMEM')
-        mtta.models.mockable_open(
-            '100.txt').AndReturn(StringIO.StringIO(schedule))
+        mtta.models._mockable_open('100.txt', 'rb').AndReturn(
+            StringIO.StringIO(schedule))
         self.mox.ReplayAll()
         TripDay.import_schedule(self.signup, '100.txt')
         self.mox.VerifyAll()
@@ -426,8 +426,8 @@ Pattern    DAS1             6BUE      11PE   11Uti               WHM
         line = self.lines['100']
         line.line_abbr = '100FLEX'
         line.save()
-        mtta.models.mockable_open(
-            '100.txt').AndReturn(StringIO.StringIO(self.schedules['100']))
+        mtta.models._mockable_open('100.txt', 'rb').AndReturn(
+            StringIO.StringIO(self.schedules['100']))
         self.mox.ReplayAll()
         TripDay.import_schedule(self.signup, '100.txt')
         self.mox.VerifyAll()
@@ -441,8 +441,8 @@ Pattern    DAS1             6BUE      11PE   11Uti               WHM
         line = self.lines['100']
         line.line_abbr = '100SFLX'
         line.save()
-        mtta.models.mockable_open(
-            '100.txt').AndReturn(StringIO.StringIO(schedule))
+        mtta.models._mockable_open('100.txt', 'rb').AndReturn(
+            StringIO.StringIO(schedule))
         self.mox.ReplayAll()
         TripDay.import_schedule(self.signup, '100.txt')
         self.mox.VerifyAll()
@@ -451,8 +451,8 @@ Pattern    DAS1             6BUE      11PE   11Uti               WHM
     def test_880F_non_timing_nodes(self):
         '''For some flex lines, nodes are not timing nodes'''
         self.setup_880F()
-        mtta.models.mockable_open(
-            '880F.txt').AndReturn(StringIO.StringIO(self.schedules['880F']))
+        mtta.models._mockable_open('880F.txt', 'rb').AndReturn(
+            StringIO.StringIO(self.schedules['880F']))
         self.mox.ReplayAll()
         TripDay.import_schedule(self.signup, '880F.txt')
         self.mox.VerifyAll()
@@ -578,8 +578,8 @@ Pattern    DAS1             6BUE      11PE     StFr               WHM
      01   20:00   20:01    20:01     20:06    20:08      20:08  20:43
 """
 
-        mtta.models.mockable_open(
-            '880F.txt').AndReturn(StringIO.StringIO(schedule))
+        mtta.models._mockable_open('880F.txt', 'rb').AndReturn(
+            StringIO.StringIO(schedule))
         self.mox.ReplayAll()
         TripDay.import_schedule(self.signup, '880F.txt')
         self.mox.VerifyAll()
@@ -644,8 +644,8 @@ Pattern      123Ar            Arr MMS2  Lv MMS2  Adm/MemE
         self.patterns['100-01'].stopbypattern_set.create(
             stop=self.stops[6650], node=self.nodes[788], seq=4,
             linedir=self.linedirs['100-0'])
-        mtta.models.mockable_open(
-            '100.txt').AndReturn(StringIO.StringIO(schedule))
+        mtta.models._mockable_open('100.txt', 'rb').AndReturn(
+            StringIO.StringIO(schedule))
         self.mox.ReplayAll()
         TripDay.import_schedule(self.signup, '100.txt')
         self.mox.VerifyAll()
