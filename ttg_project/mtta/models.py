@@ -119,7 +119,6 @@ class Line(models.Model):
 
     @classmethod
     def import_dbf(cls, signup, path):
-        # TODO: Combine NNNFLEX and NNNSFLX into a single line
         logger.info('Parsing Lines from %s...' % path)
         db_f = dbfpy.dbf.Dbf(path, readOnly=True)
         line_cnt, linedir_cnt = 0, 0
@@ -762,6 +761,8 @@ class TripStop(models.Model):
     node_abbr = models.CharField(max_length=8, blank=True)
     seq = models.IntegerField()
     scheduled = models.BooleanField(help_text='Stop is a scheduled stop.')
+    arrival = models.OneToOneField(
+        'TripStop', related_name='departure', null=True, blank=True)
 
     class Meta:
         unique_together = ordering = ('tripday', 'seq')
@@ -816,12 +817,22 @@ class TripStop(models.Model):
         data_cols = columns[data_col:]
         line_type = tripday.linedir.line.line_type
         if line_type == 'FX':
-            tripstops = cls._parse_normal_columns(tripday, data_cols)
+            tripstop_params = cls._parse_normal_columns(tripday, data_cols)
         else:
             assert line_type == 'FL'
-            tripstops = cls._parse_flex_columns(tripday, data_cols)
+            tripstop_params = cls._parse_flex_columns(tripday, data_cols)
+
+        tripstops = []
+        last_params = dict()
+        for seq, params in enumerate(tripstop_params):
+            params['tripday'] = tripday
+            params['seq'] = seq
+            if 'stop' in params and last_params.get('stop') == params['stop']:
+                params['arrival'] = tripstops[-1]
+            tripstops.append(TripStop.objects.create(**params))
+            last_params = params
         return pattern_bounds, data_bounds, tripstops
-    
+
     @classmethod
     def _parse_normal_columns(cls, tripday, col_lines):
         '''Parse the node/stop columns on a normal line'''
@@ -851,17 +862,10 @@ class TripStop(models.Model):
             tripstop_params.append(
                 dict(stop=stop, node=node, stop_abbr=stop_abbr,
                      node_abbr=node_abbr, scheduled=(node is not None)))
-        if stops_by_line_matches:
-            # This is the best way to match times to stops
-            tripstops = []
-            for seq, params in enumerate(tripstop_params):
-                params['tripday'] = tripday
-                params['seq'] = seq
-                tripstops.append(TripStop.objects.create(**params))
-            return tripstops
-        else:
+        if not stops_by_line_matches:
             raise Exception('Parsing a normal line failed!')
-    
+        return tripstop_params
+
     @classmethod
     def _parse_flex_columns(cls, tripday, col_lines):
         '''Parse the node/stop columns on a flex line'''
@@ -905,7 +909,7 @@ class TripStop(models.Model):
                                 "On tripday %s, no node match for '%s', but"
                                 " stop '%s' matches.  It has no nodes, so"
                                 " leaving node empty." %
-                                (tripday, node_abbr, stop))                            
+                                (tripday, node_abbr, stop))
                     else:
                         continue
                     sbls.remove(sbl)
@@ -923,7 +927,7 @@ class TripStop(models.Model):
                     logger.warning(
                         "On tripday %s, no match for timing node %s (stop %s)"
                         " in schedule.  Assiging to unscheduled node %s"
-                        " (stop %s)." % 
+                        " (stop %s)." %
                             (tripday, sbl.node, sbl.stop, un['node_abbr'],
                              un['stop_abbr']))
                     un['node'] = sbl.node
@@ -963,14 +967,7 @@ class TripStop(models.Model):
                         "On tripday %s, at trip stop %s, %d stops found for"
                         " stop abbreviation '%s'. Leaving stop unassigned" %
                         (tripday, seq, len(stops), stop_abbr))
-                
-        # Write to database
-        tripstops = []
-        for seq, params in enumerate(tripstop_params):
-            params['tripday'] = tripday
-            params['seq'] = seq
-            tripstops.append(TripStop.objects.create(**params))
-        return tripstops
+        return tripstop_params
 
 
 class Trip(models.Model):
@@ -1042,12 +1039,29 @@ class TripTime(models.Model):
         if force_time and not time:
             logger.warning('Skipping TripTime "%s" - needs time' % self)
             return None
+        if hasattr(self.tripstop, 'departure'):
+            d = self.trip.triptime_set.filter(tripstop=self.tripstop.departure)
+            if d.exists():
+                departure_time = d[0].time
+            else:
+                # The departure stop is not part of this trip
+                departure_time = time
+        elif self.tripstop.arrival:
+            a = self.trip.triptime_set.filter(tripstop=self.tripstop.arrival)
+            if a.exists():
+                # Already included in the departure
+                return None
+            else:
+                # Arrival stop not part of this trip - treat as normal stop
+                departure_time = time
+        else:
+            departure_time=time
         gtfs_stop = self.tripstop.stop.copy_to_feed(feed)
         gtfs_stoptime, created = gtfs_trip.stoptime_set.get_or_create(
             stop=gtfs_stop, stop_sequence=self.tripstop.seq, defaults=dict(
-                arrival_time=time, departure_time=time))
+                arrival_time=time, departure_time=departure_time))
         if force_time and not created:
             gtfs_stoptime.arrival_time=time
-            gtfs_stoptime.departure_time=time
+            gtfs_stoptime.departure_time=departure_time
             gtfs_stoptime.save()
         return gtfs_stoptime

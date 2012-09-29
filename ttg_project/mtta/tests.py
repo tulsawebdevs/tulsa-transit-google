@@ -536,15 +536,15 @@ Pattern    DAS1             6BUE      11PE   11Uti               WHM
         self.assertEqual(tt6.trip, trip)
         self.assertEqual(tt6.tripstop, ts6)
         self.assertEqual(tt6.time, '20:43')
-        
+
     def test_880F_bad_node(self):
         '''For some flex lines, the stop matches but the node doesn't
-        
+
         In Aug 2012 signup, the schedule node is StFr/StFrSB, but the timing
         point (node 1037, stop 1286) is  STFRSB/StFrSB. Stop 1286's node_abbr
         is 'STFRSB' as well.  So, we just match by the stop abbreviation.
         '''
-        
+
         self.setup_880F()
         # Setup the new node
         self.stops[1286] = self.signup.stop_set.create(
@@ -577,7 +577,7 @@ Pattern    DAS1             6BUE      11PE     StFr               WHM
 
      01   20:00   20:01    20:01     20:06    20:08      20:08  20:43
 """
-        
+
         mtta.models.mockable_open(
             '880F.txt').AndReturn(StringIO.StringIO(schedule))
         self.mox.ReplayAll()
@@ -589,4 +589,77 @@ Pattern    DAS1             6BUE      11PE     StFr               WHM
         self.assertEqual(ts4.node_abbr, 'StFr')
         self.assertEqual(ts4.node, self.nodes[1037])
         self.assertTrue(ts4.scheduled, True)
+
+    def test_100_node_with_arrival_and_departure(self):
+        '''If a node had arrival and departure, add to import
+
+        In the Aug 2012 signup, the MMS2 node has an arrival and departure
+
+        TODO: It seems that the check should fail if the stop abbreviations
+        do not match.  However, this might be a FLEX line timing node
+        matching issue, not a arrival/departure matching issue.
+        '''
+        schedule = """\
+Stop Trips
+~~~~~~~~~~
+
+SignUp:       TEST SEP 2012
+Service:      1
+Line:         100
+Exception:    Off
+Printed:      09-09-2012 17:08
+
+Direction:    To Downtown
+
+Pattern      123Ar            Arr MMS2  Lv MMS2  Adm/MemE
+          Arch124a   Adm106p     MBAY2    MBAY2    AdmMem
+~~~~~~~  ~~~~~~~~~  ~~~~~~~~  ~~~~~~~~  ~~~~~~~  ~~~~~~~~
+
+     01       7:00      7:30      7:35     7:44      8:00
+
+"""
+        self.setup_100()
+        # Move Adm/MemE to 5
+        self.linedirs['100-0'].stopbyline_set.filter(seq=3).update(seq=5)
+        self.patterns['100-01'].stopbypattern_set.filter(seq=3).update(seq=5)
+        # Arr MMS2/MBAY2
+        self.stops[6650] = self.signup.stop_set.create(
+            stop_id=6650, stop_abbr='MBAY2', stop_name='MMS Bay2',
+            node_abbr='LV MMS2', site_name='Midtown Memorial Station',
+            lat='36.113915', lon='-95.888784', in_service=True)
+        self.nodes[787] = self.signup.node_set.create(
+            node_id=787, abbr='Arr MMS2', name='MMS BAY 02')
+        self.nodes[787].stops.add(self.stops[6650])
+        self.linedirs['100-0'].stopbyline_set.create(
+            stop=self.stops[6650], node=self.nodes[787], seq=3)
+        self.patterns['100-01'].stopbypattern_set.create(
+            stop=self.stops[6650], node=self.nodes[787], seq=3,
+            linedir=self.linedirs['100-0'])
+        # Lv MMS2/MBAY2
+        self.nodes[788] = self.signup.node_set.create(
+            node_id=788, abbr='Lv MMS2', name='MMS Bay 2')
+        self.nodes[788].stops.add(self.stops[6650])
+        self.linedirs['100-0'].stopbyline_set.create(
+            stop=self.stops[6650], node=self.nodes[788], seq=4)
+        self.patterns['100-01'].stopbypattern_set.create(
+            stop=self.stops[6650], node=self.nodes[788], seq=4,
+            linedir=self.linedirs['100-0'])
+        mtta.models.mockable_open(
+            '100.txt').AndReturn(StringIO.StringIO(schedule))
+        self.mox.ReplayAll()
+        TripDay.import_schedule(self.signup, '100.txt')
+        self.mox.VerifyAll()
+        arr = TripStop.objects.get(seq=2)
+        self.assertEqual(arr.stop_abbr, 'MBAY2')
+        self.assertEqual(arr.stop, self.stops[6650])
+        self.assertEqual(arr.node_abbr, 'Arr MMS2')
+        self.assertEqual(arr.node, self.nodes[787])
+        self.assertTrue(arr.scheduled, True)
+        lv = TripStop.objects.get(seq=3)
+        self.assertEqual(lv.stop_abbr, 'MBAY2')
+        self.assertEqual(lv.stop, self.stops[6650])
+        self.assertEqual(lv.node_abbr, 'Lv MMS2')
+        self.assertEqual(lv.node, self.nodes[788])
+        self.assertTrue(lv.scheduled, True)
+        self.assertEqual(arr.departure, lv)
 
