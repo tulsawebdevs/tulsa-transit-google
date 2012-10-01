@@ -127,6 +127,8 @@ class SignUp(models.Model):
             signup=self, feed=feed, started=feed.created)
         agency = AgencyInfo.objects.get(pk=1)
         agency.copy_to_feed(feed)
+        feedinfo = FeedInfo.objects.get(pk=1)
+        feedinfo.copy_to_feed(feed)
         for line in self.line_set.all():
             logger.info('Exporting data for line %s...' % line)
             line.copy_to_feed(feed)
@@ -164,6 +166,17 @@ class AgencyInfo(models.Model):
             name=self.name, url=self.url, timezone=self.timezone,
             lang=self.lang, phone=self.phone, fare_url=self.fare_url)
 
+
+class FeedInfo(models.Model):
+    '''Tulsa Web Devs information used by GTFS feed'''
+    name = models.CharField(max_length=20)
+    url = models.URLField()
+    lang = models.CharField(max_length=2)
+    version = models.CharField(max_length=20, null=True, blank=True)
+
+    def copy_to_feed(self, feed):
+        feed.feedinfo_set.get_or_create(
+            publisher_name=self.name, publisher_url=self.url, lang=self.lang)
 
 class DbfBase(models.Model):
     '''Base class for models from .DBF data'''

@@ -10,6 +10,14 @@
         "fare_url": "http://tulsatransit.org/fares-passes/"
     }
 },{
+    "model": "mtta.feedinfo",
+    "pk": 1,
+    "fields": {
+        "name": "Tulsa Web Devs",
+        "url": "http://tulsawebdevs.org",
+        "lang": "en"
+    }
+},{
     "model": "mtta.service",
     "pk": 1,
     "fields": {
