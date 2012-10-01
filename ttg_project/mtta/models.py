@@ -1,6 +1,7 @@
 from collections import defaultdict
 import datetime
 import logging
+import re
 import os
 
 from django.db import models
@@ -54,25 +55,33 @@ class SignUp(models.Model):
         ('stopsbyline',),
         ('stopsbypattern',),
     )
+    _names_file = 'NewFieldNames.txt'
 
     def import_folder(self, folder):
         data_files = defaultdict(dict)
         stop_trips = []
         stop_trips_start = 'Stop Trips'
         for path, dirs, files in os.walk(folder):
+            data_name = None
             for f in files:
                 full_path = os.path.abspath(os.path.join(path, f))
-                full_name = os.path.split(full_path)[-1].lower()
+                full_name = f.lower()
                 name, ext = os.path.splitext(full_name)
                 ext = ext.replace('.', '')
                 for nameset in self._data_file_names:
                     if name in nameset:
-                        data_files[nameset[0]][ext] = full_path
+                        data_name = nameset[0]
+                        data_files[data_name][ext] = full_path
+
                 if ext == 'txt':
                     with open(full_path, 'r') as candidate:
                         first_bits = candidate.read(len(stop_trips_start))
                     if (first_bits == stop_trips_start):
                         stop_trips.append(full_path)
+            if data_name and self._names_file in files:
+                full_path = os.path.abspath(
+                    os.path.join(path, self._names_file))
+                data_files[data_name][self._names_file] = full_path
 
         for nameset in self._data_file_names:
             key = nameset[0]
@@ -87,25 +96,28 @@ class SignUp(models.Model):
 
         # Get the important parts, so we'll raise a KeyError early
         lines_dbf = data_files['lines']['dbf']
+        lines_names = data_files['lines'].get(self._names_file)
         patterns_dbf = data_files['patterns']['dbf']
         patterns_shp = data_files['patterns']['shp']
-        if 'shx' in data_files['patterns']:
-            patterns_shx = data_files['patterns']['shx']
-        else:
-            patterns_shx = None
+        patterns_shx = data_files['patterns'].get('shx')
         stops_dbf = data_files['stops']['dbf']
+        stops_names = data_files['stops'].get(self._names_file)
         stopsbyline_dbf = data_files['stopsbyline']['dbf']
+        stopsbyline_names = data_files['stopsbyline'].get(self._names_file)
         stopsbypattern_dbf = data_files['stopsbypattern']['dbf']
+        stopsbypattern_names = data_files['stopsbypattern'].get(
+            self._names_file)
 
         # Run the model-specific imports
         if not self.service_set.exists():
             Service.create_from_defaults(self)
-        Line.import_dbf(self, lines_dbf)
+        Line.import_dbf(self, lines_dbf, lines_names)
         Pattern.import_shp(
             self, dbf=patterns_dbf, shp=patterns_shp, shx=patterns_shx)
-        Stop.import_dbf(self, stops_dbf)
-        StopByLine.import_dbf(self, stopsbyline_dbf)
-        StopByPattern.import_dbf(self, stopsbypattern_dbf)
+        Stop.import_dbf(self, stops_dbf, stops_names)
+        StopByLine.import_dbf(self, stopsbyline_dbf, stopsbyline_names)
+        StopByPattern.import_dbf(
+            self, stopsbypattern_dbf, stopsbypattern_names)
         for schedule in stop_trips:
             TripDay.import_schedule(self, schedule)
 
@@ -132,6 +144,12 @@ class SignupExports(models.Model):
     finished = models.DateTimeField(null=True, blank=True)
 
 
+class ShapeAttributes(models.Model):
+    signup = models.ForeignKey(SignUp)
+    name = models.CharField(max_length=20)
+    attributes = JSONField(default=[])
+
+
 class AgencyInfo(models.Model):
     '''MTTA information used by GTFS feed'''
     name = models.CharField(max_length=20)
@@ -147,7 +165,210 @@ class AgencyInfo(models.Model):
             lang=self.lang, phone=self.phone, fare_url=self.fare_url)
 
 
-class Line(models.Model):
+class DbfBase(models.Model):
+    '''Base class for models from .DBF data'''
+    attributes = JSONField(default=[])
+
+    class Meta:
+        abstract = True
+
+    @classmethod
+    def read_dbf(cls, signup, dbf_file, names_file):
+        '''Read and summarize data from a DBF file
+
+
+        Kwargs:
+            signup: The sign-up to associate this item with
+            dbf_file: The DBF file
+            names_file: The 'NewFieldNames.txt' file
+
+        Returns: tuple of:
+            fields - List of dictionaries describing the DBF fields, stored in
+                ShapeAttributes as well
+            rows - List of dictionaries for each DBF row, with only the
+                important values (either used in the model fields, or value is
+                different from 50% of the other values for that field)
+                Uses the class variable _dbf_mapping to decide if a
+                low-information variable should be included.
+        '''
+
+        # Get the field names we're looking to store in the database
+        assert hasattr(cls, '_dbf_mapping')
+        used_names = dict([(a, 0) for a, b in cls._dbf_mapping])
+
+        # Parse the names file for long names
+        if hasattr(names_file, 'seek'):
+            names_file.seek(0)
+        names_content = names_file.read()
+        long_name_pairs = re.findall('(\w+) for (\w+)', names_content)
+        long_names = dict(
+            [(k.upper(), v.upper()) for (k, v) in long_name_pairs])
+
+        # Read all the rows
+        db_f = dbfpy.dbf.Dbf(dbf_file, readOnly=True)
+        rows = [row.asList() for row in db_f]
+
+        # Read the field info, count value frequencies
+        fields = []
+        for index, field in enumerate(db_f.fieldDefs):
+            name, type_code, length, field_default_value = field.fieldInfo()
+
+            # Long names come from the names file
+            long_name = long_names.get(name.upper())
+            if not long_name and name.upper().startswith('TPFIELD'):
+                # Line has both line directions in same table
+                long_name = long_names.get(name.upper()[:-1])
+                if long_name:
+                    long_name += name[-1]
+
+            # Find the value variance
+            value_counts = defaultdict(int)
+            for row in rows:
+                val = row[index]
+                value_counts[val] += 1
+
+            # Find the top values
+            values_by_count = [(c, v) for v, c in value_counts.items()]
+            values_by_count.sort(reverse=True)
+            top_count, top_value = values_by_count[0]
+
+            # Decide if a default value should be used for the field
+            if name in used_names:
+                used_names[name] += 1
+                default_value = None
+            elif long_name in used_names:
+                used_names[long_name] += 1
+                default_value = None
+            elif top_count > (0.5 * len(rows)):
+                if isinstance(top_value, basestring):
+                    default_value = unicode(top_value, encoding='latin-1')
+                else:
+                    default_value = top_value
+            else:
+                default_value = None
+
+            # Store the field definition
+            field_params = dict(
+                name=name, type_code=type_code, length=length,
+                default_value=default_value, index=index,
+                top_values=values_by_count[:5])
+            if long_name:
+                field_params['long_name'] = long_name
+            fields.append(field_params)
+
+        # Check used fields:
+        for name, count in used_names.items():
+            if count != 1:
+                msg = '%s appears %d times in DBF fields,' % (name, count)
+                msg += ' only first will be used:'
+                for field in fields:
+                    if field['name'] == name or field.get('long_name') == name:
+                        msg += '\n  ' + str(field)
+                logger.warning(msg)
+
+        # Store the field definitions in the database
+        ShapeAttributes.objects.create(
+            signup=signup, attributes=fields, name=cls.__name__)
+
+        # Convert the rows to minimized dicts
+        row_summaries = []
+        for row in rows:
+            summary = list()
+            assert len(row) == len(fields)
+            for val, field in zip(row, fields):
+                default = field['default_value']
+                if isinstance(val, basestring):
+                    val = unicode(val, encoding='latin-1')
+                if (default is None) or (val != default):
+                    summary.append(dict(
+                        name=field['name'], index=field['index'], value=val))
+                    if 'long_name' in field:
+                        summary[-1]['long_name'] = field['long_name']
+            row_summaries.append(summary)
+        return fields, row_summaries
+
+    @classmethod
+    def import_dbf(cls, signup, dbf, names):
+        '''Import a DBF as several objects for an instance
+
+        Kwargs:
+            signup: The sign-up to associate this item with
+            dbf: The DBF file or the path to the file
+            names: The 'NewFieldNames.txt' file or the path to the file
+
+        This function uses class items to customize behaviour:
+        - _dbf_mapping (required) maps DBF column names to model field names
+        - funtions named like 'convert_DBFNAME' convert the DBF value to the
+          field value
+        - create_from_dbf is used instead of create when associated models
+          need to be created
+        '''
+        assert hasattr(cls, '_dbf_mapping')
+        dbf_file = _force_to_file(dbf)
+        names_file = _force_to_file(names)
+        my_name = cls.__name__
+        logger.info(
+            'Reading %s data from %s...' % (my_name, dbf_file.name))
+
+        dbf_fields, dbf_rows = cls.read_dbf(signup, dbf_file, names_file)
+        model_params = []
+        for row in dbf_rows:
+            # Collect DBF values from row
+            values = dict()
+            for item in row:
+                name = item['name']
+                long_name = item.get('long_name')
+                value = item['value']
+                if name not in values:
+                    values[name] = value
+                if long_name and long_name not in values:
+                    values[long_name] = value
+
+            # Map to model fields
+            params = dict(attributes=row)
+            for dbf_name, field_name in cls._dbf_mapping:
+                value = values[dbf_name]
+                converter = getattr(cls, 'convert_' + dbf_name.upper(), None)
+                if converter:
+                    value = converter(value)
+                params[field_name] = value
+            model_params.append(params)
+
+        # Create the database entries
+        creator = getattr(cls, 'create_from_dbf', cls.objects.create)
+        created_counts = defaultdict(int)
+        for params in model_params:
+            obj = creator(signup=signup, **params)
+            if isinstance(obj, DbfBase):
+                created_counts[obj.__class__.__name__] += 1
+            else:
+                for o in obj:
+                    created_counts[o.__class__.__name__] += 1
+
+        # Report on what was done
+        counts = [(created_counts.pop(my_name), my_name)]
+        for name in sorted(created_counts.keys()):
+            counts.append((created_counts[name], name))
+        msg = 'Read '
+        fmt = lambda c, n: '%d %s%s' % (c, n, 's' if c > 1 else '')
+        if len(counts) > 2:
+            msg += ', '.join(fmt(*c) for c in counts[:-1])
+            msg += ', and %s' % fmt(*counts[-1])
+        else:
+            msg += fmt(*counts[0])
+            if len(counts) == 2:
+                msg += ' and %s' % fmt(*counts[1])
+        msg += ' from %s' % dbf_file.name
+        logger.info(msg)
+
+    @classmethod
+    def convert_latlon(cls, value):
+        '''Convert a DBF lat/lon to a string'''
+        raw = str(value)
+        return raw[:-6] + '.' + raw[-6:]
+
+
+class Line(DbfBase):
     '''A transit line from lines.dbf'''
     signup = models.ForeignKey(SignUp)
     line_id = models.IntegerField(db_index=True)
@@ -163,38 +384,36 @@ class Line(models.Model):
     def __unicode__(self):
         return "%s-%s" % (self.line_id, self.line_abbr)
 
-    @classmethod
-    def import_dbf(cls, signup, path_or_file):
-        dbf_file = _force_to_file(path_or_file)
-        logger.info('Parsing Lines from %s...' % dbf_file.name)
-        db_f = dbfpy.dbf.Dbf(dbf_file, readOnly=True)
-        line_cnt, linedir_cnt = 0, 0
-        for record in db_f:
-            line_id = record['LineID']
-            line_abbr = record['LineAbbr']
-            line_name = unicode(record['LineName'], encoding='latin-1')
-            line_color = record['LineColor']
-            line_type = record['LineType']
-            line = cls.objects.create(
-                signup=signup, line_id=line_id, line_abbr=line_abbr,
-                line_name=line_name, line_color=line_color,
-                line_type=line_type)
-            line_cnt += 1
-            linedir_id0 = record['LineDirId0']
-            if linedir_id0:
-                LineDirection.objects.create(
-                    line=line, linedir_id=linedir_id0,
-                    name=record['TPFIELD320'])
-                linedir_cnt +=1
-            linedir_id1 = record['LineDirId1']
-            if linedir_id1:
-                LineDirection.objects.create(
-                    line=line, linedir_id=linedir_id1,
-                    name=record['TPFIELD321'])
-                linedir_cnt += 1
-        logger.info(
-            'Parsed %d Lines, %s LineDirections.' % (line_cnt, linedir_cnt))
+    # Map DBF source columns to model fields
+    _dbf_mapping = (
+        ('LINEID', 'line_id'),
+        ('LINEABBR', 'line_abbr'),
+        ('LINENAME', 'line_name'),
+        ('LINECOLOR', 'line_color'),
+        ('LINETYPE', 'line_type'),
+        ('LINEDIRID0', 'linedirid0'),
+        ('DIRECTIONNAME0', 'directionname0'),
+        ('LINEDIRID1', 'linedirid1'),
+        ('DIRECTIONNAME1', 'directionname1'))
 
+    @classmethod
+    def create_from_dbf(cls, **params):
+        '''Create Line and associated LineDirections from DBF data'''
+        ld0_params = dict(
+            linedir_id=params.pop('linedirid0'),
+            name=params.pop('directionname0'))
+        ld1_params = dict(
+            linedir_id=params.pop('linedirid1'),
+            name=params.pop('directionname1'))
+        line = cls.objects.create(**params)
+        linedirs = []
+        if ld0_params['linedir_id']:
+            linedir0 = LineDirection.objects.create(line=line, **ld0_params)
+            linedirs.append(linedir0)
+        if ld1_params['linedir_id']:
+            linedir1 = LineDirection.objects.create(line=line, **ld1_params)
+            linedirs.append(linedir1)
+        return [line] + linedirs
 
     def color_as_hex(self):
         '''Convert integer value into a hex color value
@@ -274,9 +493,10 @@ class Pattern(models.Model):
         dbf_file = _force_to_file(dbf)
         shp_file = _force_to_file(shp)
         shx_file = _force_to_file(shx)
-        logger.info('Parsing Pattern Shapes (dbf=%s, shp=%s, %s)' %
+        logger.info(
+            'Parsing Pattern Shapes (dbf=%s, shp=%s, %s)' %
             (dbf_file.name, shp_file.name,
-             ('shx=%s' %shx_file.name) if shx_file else 'no shx'))
+            ('shx=%s' % shx_file.name) if shx_file else 'no shx'))
         sf = shapefile.Reader(
             dbf=dbf_file, shp=shp_file, shx=shx_file)
         assert sf.shapeType == 3  # PolyLine
@@ -335,6 +555,15 @@ class Pattern(models.Model):
             return haversine(node1[0], node1[1], node2[0], node2[1])
 
         if not self.fixed_pattern:
+            # For debugging adding and discarding segments
+            def log_action(msg, n1, n2):
+                logger.info(
+                    ' Pattern %s for linedir %s of line %s: %s'
+                    ' (%0.5f, %0.5f)->(%0.5f, %0.5f) (%0.1f meters)' % (
+                        self, self.linedir, self.linedir.line, msg,
+                        n2[0], n2[1], n3[0], n3[1],
+                        1000.0 * node_dist(n2, n3)))
+
             # Create line
             line = []
             parts = self.raw_pattern
@@ -358,12 +587,9 @@ class Pattern(models.Model):
                     if n2 == n3:
                         line.extend((n1, n2, n4))
                     elif node_dist(n2, n3) < min_add_dist:
-                        # print "Pattern %s:%s for line %s: Adding first segment (%0.5f, %0.5f) -> (%0.5f, %0.5f) (%0.1f meters)" % (pattern_id, pattern, linedir_id, n2[0], n2[1], n3[0], n3[1], 1000.0 * node_dist(n2, n3))
                         line.extend((n1, n2, n3, n4))
                     else:
-                        pass
-                        #if verbose:
-                        #    print "Pattern %s:%s for line %s: Discarding first segment (%0.5f, %0.5f) -> (%0.5f, %0.5f) (%0.1f meters)" % (pattern_id, pattern, linedir_id, n2[0], n2[1], n3[0], n3[1], 1000.0 * node_dist(n2, n3))
+                        log_action('Discarding first segment', n2, n3)
                     first_nodes = None
                 elif line:
                     last_node = line[-1]
@@ -375,16 +601,13 @@ class Pattern(models.Model):
                             (last_node, node2, node1))])
                     n1, n2, n3 = node_orders[0][1]
                     # Optimize for tail point in the new segment
-                    if n1 == n2:
+                    if n1 == n2 or n2 == n3:
                         line.append(n3)
                     elif node_dist(n1, n2) < min_add_dist:
-                        #if verbose:
-                        #    print "Pattern %s:%s for line %s: Adding segment (%0.5f, %0.5f) -> (%0.5f, %0.5f) (%0.1f meters)" % (pattern_id, pattern, linedir_id, n1[0], n1[1], n2[0], n2[1], 1000.0 * node_dist(n1, n2))
+                        log_action('Adding segment', n1, n2)
                         line.extend((n2, n3))
                     else:
-                        pass
-                        #if verbose:
-                        #    print "Pattern %s:%s for line %s: Discarding segment (%0.5f, %0.5f) -> (%0.5f, %0.5f) (%0.1f meters)" % (pattern_id, pattern, linedir_id, n1[0], n1[1], n2[0], n2[1], 1000.0 * node_dist(n1, n2))
+                        log_action('Discarding segment', n2, n2)
                 else:
                     # Collect the first segment for later
                     first_nodes = (node1, node2)
@@ -393,7 +616,7 @@ class Pattern(models.Model):
         return self.fixed_pattern
 
 
-class Stop(models.Model):
+class Stop(DbfBase):
     '''A stop from stops.dbf'''
     signup = models.ForeignKey(SignUp)
     stop_id = models.IntegerField(db_index=True)
@@ -416,29 +639,19 @@ class Stop(models.Model):
     def __unicode__(self):
         return "%s-%s" % (self.stop_id, self.stop_abbr)
 
-    @classmethod
-    def import_dbf(cls, signup, path_or_file):
-        dbf_file = _force_to_file(path_or_file)
-        logger.info('Parsing Stops from %s...' % dbf_file.name)
-        db_f = dbfpy.dbf.Dbf(dbf_file, readOnly=True)
-        stop_cnt = 0
-        for record in db_f:
-            stop_id = record['StopID']
-            stop_abbr = record['StopAbbr']
-            stop_name = unicode(record['StopName'], encoding='latin-1')
-            node_abbr = record['NodeAbbr']
-            site_name = unicode(record['SiteName'], encoding='latin-1')
-            raw_lat = str(record['Lat'])
-            lat = raw_lat[:-6] + '.' + raw_lat[-6:]
-            raw_lon = str(record['Lon'])
-            lon = raw_lon[:-6] + '.' + raw_lon[-6:]
-            in_service = record['InService']
-            cls.objects.create(
-                signup=signup, stop_id=stop_id, stop_abbr=stop_abbr,
-                stop_name=stop_name, node_abbr=node_abbr, site_name=site_name,
-                lat=lat, lon=lon, in_service=in_service)
-            stop_cnt += 1
-        logger.info('Parsed %d Stops.' % stop_cnt)
+    # Map DBF source columns to model fields
+    _dbf_mapping = (
+        ('STOPID', 'stop_id'),
+        ('STOPABBR', 'stop_abbr'),
+        ('STOPNAME', 'stop_name'),
+        ('NODEABBR', 'node_abbr'),
+        ('SITENAME', 'site_name'),
+        ('LAT', 'lat'),
+        ('LON', 'lon'),
+        ('INSERVICE', 'in_service'))
+
+    convert_LAT = DbfBase.convert_latlon
+    convert_LON = DbfBase.convert_latlon
 
     def copy_to_feed(self, feed):
         gtfs_stop, created = feed.stop_set.get_or_create(
@@ -457,17 +670,17 @@ class Node(models.Model):
     signup = models.ForeignKey(SignUp)
     stops = models.ManyToManyField(Stop, related_name='nodes')
     node_id = models.IntegerField(db_index=True)
-    abbr = models.CharField(max_length=8)
-    name = models.CharField(max_length=50)
+    node_abbr = models.CharField(max_length=8)
+    node_name = models.CharField(max_length=50)
 
     def __unicode__(self):
-        return "%s-%s" % (self.node_id, self.abbr)
+        return "%s-%s" % (self.node_id, self.node_abbr)
 
     class Meta:
         ordering = ('node_id',)
 
 
-class StopByLine(models.Model):
+class StopByLine(DbfBase):
     stop = models.ForeignKey(Stop)
     linedir = models.ForeignKey(LineDirection)
     seq = models.IntegerField()
@@ -481,56 +694,44 @@ class StopByLine(models.Model):
     def __unicode__(self):
         return '%s-%02d' % (self.linedir.linedir_id, self.seq)
 
+    # Map DBF source columns to model fields
+    _dbf_mapping = (
+        ('STOPID', 'stop_id'),
+        ('LINEDIRID', 'linedir_id'),
+        ('SEQUENCE', 'seq'),
+        ('STOPTYPE', 'stop_type'),
+        ('NODEID', 'node_id'),
+        ('NODEABBR', 'node_abbr'),
+        ('NODENAME', 'node_name'))
+
     @classmethod
-    def import_dbf(cls, signup, path_or_file):
-        dbf_file = _force_to_file(path_or_file)
-        logger.info('Parsing Stops->Line from %s...' % dbf_file.name)
-        db_f = dbfpy.dbf.Dbf(dbf_file, readOnly=True)
-        sxl_cnt, node_cnt, new_node_cnt, stop_cnt = 0, 0, 0, 0
-        for record in db_f:
-            stop_id = record['StopID']
-            stop_abbr = record['StopAbbr']
-            stop_name = unicode(record['StopName'], encoding='latin-1')
-            site_name = unicode(record['SiteName'], encoding='latin-1')
-            raw_lat = str(record['Lat'])
-            lat = raw_lat[:-6] + '.' + raw_lat[-6:]
-            raw_lon = str(record['Lon'])
-            lon = raw_lon[:-6] + '.' + raw_lon[-6:]
-            stop = Stop.objects.get(signup=signup, stop_id=stop_id)
-            assert stop.stop_abbr == stop_abbr
-            assert stop.stop_name == stop_name
-            assert stop.site_name == site_name
-            assert lat.startswith(str(stop.lat))
-            assert lon.startswith(str(stop.lon))
+    def create_from_dbf(cls, **params):
+        signup = params.pop('signup')
+        stop_id = params.pop('stop_id')
+        stop = Stop.objects.get(signup=signup, stop_id=stop_id)
 
-            linedirid = record['LineDirID']
-            linedir = LineDirection.objects.get(
-                line__signup=signup, linedir_id=linedirid)
+        linedir_id = params.pop('linedir_id')
+        linedir = LineDirection.objects.get(
+            line__signup=signup, linedir_id=linedir_id)
 
-            seq = record['Sequence']
-            stop_type = record['StopType']
-            if stop_type == 'N':
-                node_cnt += 1
-                node_abbr = record['NodeAbbr']
-                node_name = unicode(record['NodeName'], encoding='latin-1')
-                node_id = record['NodeID']
-                node, created = signup.node_set.get_or_create(
-                    node_id=node_id, abbr=node_abbr, name=node_name)
-                node.stops.add(stop)
-                if created:
-                    new_node_cnt += 1
-            else:
-                stop_cnt += 1
-                node = None
-
-            cls.objects.create(stop=stop, linedir=linedir, seq=seq, node=node)
-            sxl_cnt += 1
-        logger.info(
-            'Parsed %d Stops->Line: %d nodes (%d unique), %d stops.' % (
-                sxl_cnt, node_cnt, new_node_cnt, stop_cnt))
+        seq = params.pop('seq')
+        stop_type = params.pop('stop_type')
+        attributes = params.pop('attributes')
+        node = None
+        node_created = False
+        if stop_type == 'N':
+            node, node_created = signup.node_set.get_or_create(**params)
+            node.stops.add(stop)
+        sbl = cls.objects.create(
+            stop=stop, linedir=linedir, seq=seq, node=node,
+            attributes=attributes)
+        if node_created:
+            return [sbl, node]
+        else:
+            return sbl
 
 
-class StopByPattern(models.Model):
+class StopByPattern(DbfBase):
     stop = models.ForeignKey(Stop)
     linedir = models.ForeignKey(LineDirection)
     pattern = models.ForeignKey(Pattern)
@@ -545,61 +746,46 @@ class StopByPattern(models.Model):
     def __unicode__(self):
         return '%s-%02d' % (self.pattern.pattern_id, self.seq)
 
+    # Map DBF source columns to model fields
+    _dbf_mapping = (
+        ('STOPID', 'stop_id'),
+        ('LINEDIRID', 'linedir_id'),
+        ('PATTERNID', 'pattern_id'),
+        ('SEQUENCE', 'seq'),
+        ('STOPTYPE', 'stop_type'),
+        ('NODEID', 'node_id'),
+        ('NODEABBR', 'node_abbr'),
+        ('NODENAME', 'node_name'))
+
     @classmethod
-    def import_dbf(cls, signup, path_or_file):
-        dbf_file = _force_to_file(path_or_file)
-        logger.info('Parsing Stops->Pattern from %s...' % dbf_file.name)
-        db_f = dbfpy.dbf.Dbf(dbf_file, readOnly=True)
-        sxl_cnt, node_cnt, new_node_cnt, stop_cnt = 0, 0, 0, 0
-        for record in db_f:
-            stop_id = record['StopID']
-            stop_abbr = record['StopAbbr']
-            stop_name = unicode(record['StopName'], encoding='latin-1')
-            site_name = unicode(record['SiteName'], encoding='latin-1')
-            raw_lat = str(record['Lat'])
-            lat = raw_lat[:-6] + '.' + raw_lat[-6:]
-            raw_lon = str(record['Lon'])
-            lon = raw_lon[:-6] + '.' + raw_lon[-6:]
-            stop = Stop.objects.get(signup=signup, stop_id=stop_id)
-            assert stop.stop_abbr == stop_abbr
-            assert stop.stop_name == stop_name
-            assert stop.site_name == site_name
-            assert lat.startswith(str(stop.lat))
-            assert lon.startswith(str(stop.lon))
+    def create_from_dbf(cls, **params):
+        signup = params.pop('signup')
+        stop_id = params.pop('stop_id')
+        stop = Stop.objects.get(signup=signup, stop_id=stop_id)
 
-            linedirid = record['LineDirID']
-            linedir = LineDirection.objects.get(
-                line__signup=signup, linedir_id=linedirid)
+        linedir_id = params.pop('linedir_id')
+        linedir = LineDirection.objects.get(
+            line__signup=signup, linedir_id=linedir_id)
 
-            pattern_id = record['PatternID']
-            pattern_name = record['Pattern']
-            pattern = Pattern.objects.get(
-                linedir=linedir, pattern_id=pattern_id)
-            assert pattern.name == pattern_name
+        pattern_id = params.pop('pattern_id')
+        pattern = Pattern.objects.get(
+            linedir=linedir, pattern_id=pattern_id)
 
-            seq = record['Sequence']
-            stop_type = record['StopType']
-            if stop_type == 'N':
-                node_cnt += 1
-                node_abbr = record['NodeAbbr']
-                node_name = unicode(record['NodeName'], encoding='latin-1')
-                node_id = record['NodeID']
-                node, created = signup.node_set.get_or_create(
-                    node_id=node_id, abbr=node_abbr, name=node_name)
-                node.stops.add(stop)
-                if created:
-                    new_node_cnt += 1
-            else:
-                stop_cnt += 1
-                node = None
-
-            cls.objects.create(
-                stop=stop, linedir=linedir, pattern=pattern, seq=seq,
-                node=node)
-            sxl_cnt += 1
-        logger.info(
-            'Parsed %d Stops->Pattern: %d nodes (%d new), %d stops.' % (
-                sxl_cnt, node_cnt, new_node_cnt, stop_cnt))
+        seq = params.pop('seq')
+        stop_type = params.pop('stop_type')
+        attributes = params.pop('attributes')
+        node = None
+        node_created = False
+        if stop_type == 'N':
+            node, node_created = signup.node_set.get_or_create(**params)
+            node.stops.add(stop)
+        sbp = cls.objects.create(
+            stop=stop, linedir=linedir, pattern=pattern, seq=seq, node=node,
+            attributes=attributes)
+        if node_created:
+            return [sbp, node]
+        else:
+            return sbp
 
 
 class Service(models.Model):
@@ -765,7 +951,6 @@ class TripDay(models.Model):
                         pattern_bounds, data_bounds, tripstops = parsed
                     tripstop_cnt += len(tripstops)
                     phase = in_data
-                    found_trip = False
                     trip_seq = 0
             elif phase == in_data:
                 if linein == '':
@@ -781,7 +966,7 @@ class TripDay(models.Model):
                 else:
                     # Parse Trip
                     raw_pat = linein[pattern_bounds[0]:pattern_bounds[1]]
-                    pattern_name= raw_pat.strip()
+                    pattern_name = raw_pat.strip()
                     pattern = linedir.pattern_set.get(name=pattern_name)
                     trip = Trip.objects.create(
                         tripday=tripday, pattern=pattern, seq=trip_seq)
@@ -800,13 +985,12 @@ class TripDay(models.Model):
                 'Errors detected during parsing, may be partially imported.')
         logger.info(
             'Parsed %d times for %d trips, %d stops, and %d line directions.'
-                % (triptimes_cnt, trip_cnt, tripstop_cnt, tripday_cnt))
+            % (triptimes_cnt, trip_cnt, tripstop_cnt, tripday_cnt))
 
     def copy_to_feed(self, feed, gtfs_route):
         gtfs_service = self.service.copy_to_feed(feed)
         for trip in self.trip_set.all():
             trip.copy_to_feed(feed, gtfs_route, gtfs_service)
-
 
 
 class TripStop(models.Model):
@@ -832,8 +1016,6 @@ class TripStop(models.Model):
         assert len(col_lines) == 2 or len(col_lines) == 3
         assert set(col_lines[-1]) == set(' ~'),\
             'Last col_line must be schedule column designator'
-        linedir = tripday.linedir
-        signup = linedir.line.signup
 
         # Determine the columns
         field_bounds = list()
@@ -848,7 +1030,7 @@ class TripStop(models.Model):
                 last_char = char
         last_start, last_column = field_bounds[-1]
         if last_start != start:
-            field_bounds.append((start, column+1))
+            field_bounds.append((start, column + 1))
         # Get the column titles
         columns = list()
         for start, end in field_bounds:
@@ -898,11 +1080,11 @@ class TripStop(models.Model):
         stops_by_line_matches = True
         for seq, abbrs in enumerate(col_lines):
             node_abbr, stop_abbr = abbrs
-            sbl = linedir.stopbyline_set.get(seq=seq+1)
+            sbl = linedir.stopbyline_set.get(seq=(seq + 1))
             node = sbl.node
             stop = sbl.stop
             if node_abbr:
-                if ((not node or node_abbr != node.abbr) and
+                if ((not node or node_abbr != node.node_abbr) and
                         (not stop or node_abbr != stop.node_abbr)):
                     stops_by_line_matches = False
                     logger.info(
@@ -940,7 +1122,7 @@ class TripStop(models.Model):
                 for sbl in sbls:
                     node = sbl.node
                     stop = sbl.stop
-                    if node and node_abbr == node.abbr:
+                    if node and node_abbr == node.node_abbr:
                         params.update(dict(
                             stop=stop, node=node, scheduled=True))
                     elif stop and node_abbr.lower() == stop.node_abbr.lower():
@@ -984,9 +1166,9 @@ class TripStop(models.Model):
                     logger.warning(
                         "On tripday %s, no match for timing node %s (stop %s)"
                         " in schedule.  Assiging to unscheduled node %s"
-                        " (stop %s)." %
-                            (tripday, sbl.node, sbl.stop, un['node_abbr'],
-                             un['stop_abbr']))
+                        " (stop %s)." % (
+                            tripday, sbl.node, sbl.stop, un['node_abbr'],
+                            un['stop_abbr']))
                     un['node'] = sbl.node
                     un['stop'] = sbl.stop
                     un['scheduled'] = True
@@ -1011,8 +1193,8 @@ class TripStop(models.Model):
                     for s in stops:
                         if s.node_abbr.lower() == node_abbr.lower():
                             candidates.append(s)
-                        elif s.nodes.filter(abbr=node_abbr).count() == 1:
-                            candidates.append(s.nodes.get(abbr=node_abbr))
+                        elif s.nodes.filter(node_abbr=node_abbr).count() == 1:
+                            candidates.append(s.nodes.get(node_abbr=node_abbr))
                     if len(candidates) == 1:
                         stop = candidates[0]
                 if stop:
@@ -1112,13 +1294,13 @@ class TripTime(models.Model):
                 # Arrival stop not part of this trip - treat as normal stop
                 departure_time = time
         else:
-            departure_time=time
+            departure_time = time
         gtfs_stop = self.tripstop.stop.copy_to_feed(feed)
         gtfs_stoptime, created = gtfs_trip.stoptime_set.get_or_create(
             stop=gtfs_stop, stop_sequence=self.tripstop.seq, defaults=dict(
                 arrival_time=time, departure_time=departure_time))
         if force_time and not created:
-            gtfs_stoptime.arrival_time=time
-            gtfs_stoptime.departure_time=departure_time
+            gtfs_stoptime.arrival_time = time
+            gtfs_stoptime.departure_time = departure_time
             gtfs_stoptime.save()
         return gtfs_stoptime

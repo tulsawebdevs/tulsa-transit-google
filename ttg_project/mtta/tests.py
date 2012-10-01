@@ -4,7 +4,7 @@ from django.test import TestCase
 import mox
 
 from mtta.models import (
-    SignUp, Line, LineDirection, Pattern, Stop, Node, StopByLine,
+    SignUp, Stop, StopByLine,
     StopByPattern, Service, TripDay, TripStop, Trip, TripTime)
 import mtta.models
 
@@ -66,7 +66,7 @@ Pattern      123Ar            Adm/MemE
             node_abbr='123ARCH', lon='-95.83969', lat='36.162776',
             stop_name='E Archer St&N 124th E Ave/N 123Rd E', in_service=True)
         self.nodes[635] = self.signup.node_set.create(
-            node_id=635, abbr='123Ar', name='123rd E/Archer')
+            node_id=635, node_abbr='123Ar', node_name='123rd E/Archer')
         self.nodes[635].stops.add(self.stops[5498])
         self.linedirs['100-0'].stopbyline_set.create(
             stop=self.stops[5498], node=self.nodes[635], seq=1)
@@ -89,7 +89,8 @@ Pattern      123Ar            Adm/MemE
             lon='-95.887364', lat='36.160834',
             stop_name='E Admiral Pl&N Memorial Dr/S Memori', in_service=True)
         self.nodes[736] = self.signup.node_set.create(
-            node_id=736, abbr='Adm/MemE', name='ADMIRAL PL/MEMORIAL P W-NW')
+            node_id=736, node_abbr='Adm/MemE',
+            node_name='ADMIRAL PL/MEMORIAL P W-NW')
         self.nodes[736].stops.add(self.stops[5478])
         self.linedirs['100-0'].stopbyline_set.create(
             stop=self.stops[5478], node=self.nodes[736], seq=3)
@@ -134,7 +135,7 @@ Pattern    DAS1             6BUE      11PE   11Uti               WHM
             lon='-95.993314', node_abbr="DBAY1", stop_abbr="DBAY1",
             lat='36.151795', stop_name="DAS Bay1")
         self.nodes[738] = self.signup.node_set.create(
-            node_id=738, abbr='DAS1', name="DAS BAY 01")
+            node_id=738, node_abbr='DAS1', node_name="DAS BAY 01")
         self.nodes[738].stops.add(self.stops[6639])
         self.linedirs['880F-0'].stopbyline_set.create(
             node=self.nodes[738], stop=self.stops[6639], seq=1)
@@ -151,7 +152,7 @@ Pattern    DAS1             6BUE      11PE   11Uti               WHM
             node_abbr="6BUE", stop_abbr="6stBld",
             lat='36.149946', stop_name="W 6Th St&S Boulder Ave")
         self.nodes[856] = self.signup.node_set.create(
-            node_id=856, abbr='6BuE', name='6th/Boulder E-SW')
+            node_id=856, node_abbr='6BuE', node_name='6th/Boulder E-SW')
         self.nodes[856].stops.add(self.stops[6392])
         # 11PE/11stPeo - Non-timing node
         self.stops[5109] = self.signup.stop_set.create(
@@ -159,7 +160,7 @@ Pattern    DAS1             6BUE      11PE   11Uti               WHM
             node_abbr="11PE", stop_abbr="11stPeo", lat='36.147825',
             stop_name="E 11th St S&S Peoria Ave")
         self.nodes[38] = self.signup.node_set.create(
-            node_id=38, abbr='11Pe', name='11th/Peoria')
+            node_id=38, node_abbr='11Pe', node_name='11th/Peoria')
         self.nodes[38].stops.add(self.stops[5109])
         # 11stPeo - Distracter stop
         self.stops[5032] = self.signup.stop_set.create(
@@ -177,7 +178,7 @@ Pattern    DAS1             6BUE      11PE   11Uti               WHM
             node_abbr="11Uti", stop_abbr="11Uti", lat='36.148139',
             stop_name="11 & Utica")
         self.nodes[705] = self.signup.node_set.create(
-            node_id=705, abbr="11Uti", name="11 & Utica")
+            node_id=705, node_abbr="11Uti", node_name="11 & Utica")
         self.nodes[705].stops.add(self.stops[4156])
         self.linedirs['880F-0'].stopbyline_set.create(
             stop=self.stops[4156], node=self.nodes[705], seq=2)
@@ -205,7 +206,7 @@ Pattern    DAS1             6BUE      11PE   11Uti               WHM
             stop_abbr="WHM", lat='36.065248',
             stop_name="Woodland Hills (SEARS)")
         self.nodes[515] = self.signup.node_set.create(
-            node_id=133, abbr="WHM", name="Woodland Hills")
+            node_id=133, node_abbr="WHM", node_name="Woodland Hills")
         self.nodes[515].stops.add(self.stops[133])
         self.linedirs['880F-0'].stopbyline_set.create(
             stop=self.stops[133], node=self.nodes[515], seq=3)
@@ -299,14 +300,14 @@ Pattern    DAS1             6BUE      11PE   11Uti               WHM
         '''
         self.setup_100()
         line = self.lines['100']
-        line.line_type='FL'
+        line.line_type = 'FL'
         line.save()
         stop2 = self.stops[5440]
         StopByLine.objects.filter(stop=stop2).delete()
         StopByPattern.objects.filter(stop=stop2).delete()
         stop3 = self.stops[5478]
         StopByLine.objects.filter(stop=stop3).update(seq=2)
-        stop4 = Stop.objects.create(
+        Stop.objects.create(
             signup=self.signup, stop_id=stop2.stop_id + 1,
             stop_abbr=stop2.stop_abbr, site_name=stop2.site_name,
             lon=stop2.lon, lat=stop2.lat, stop_name=stop2.stop_name,
@@ -329,14 +330,14 @@ Pattern    DAS1             6BUE      11PE   11Uti               WHM
         '''
         self.setup_100()
         line = self.lines['100']
-        line.line_type='FL'
+        line.line_type = 'FL'
         line.save()
         stop2 = self.stops[5440]
         StopByLine.objects.filter(stop=stop2).delete()
         StopByPattern.objects.filter(stop=stop2).delete()
         stop3 = self.stops[5478]
         StopByLine.objects.filter(stop=stop3).update(seq=2)
-        stop4 = Stop.objects.create(
+        Stop.objects.create(
             signup=self.signup, stop_id=stop2.stop_id + 1,
             stop_abbr=stop2.stop_abbr, site_name=stop2.site_name,
             lon=stop2.lon, lat=stop2.lat, stop_name=stop2.stop_name,
@@ -359,7 +360,7 @@ Pattern    DAS1             6BUE      11PE   11Uti               WHM
         '''
         self.setup_100()
         line = self.lines['100']
-        line.line_type='FL'
+        line.line_type = 'FL'
         line.save()
         stop2 = self.stops[5440]
         StopByLine.objects.filter(stop=stop2).delete()
@@ -393,7 +394,7 @@ Pattern    DAS1             6BUE      11PE   11Uti               WHM
         '''
         self.setup_100()
         line = self.lines['100']
-        line.line_type='FL'
+        line.line_type = 'FL'
         line.save()
         stop2 = self.stops[5440]
         StopByLine.objects.filter(stop=stop2).delete()
@@ -552,7 +553,8 @@ Pattern    DAS1             6BUE      11PE   11Uti               WHM
             node_abbr='STFRSB', stop_abbr='StFrSB',
             stop_name='Saint Francis Hosp S-SW')
         self.nodes[1037] = self.signup.node_set.create(
-            node_id=1037, abbr='STFRSB', name='ST FRANCIS SOUTHBOUND')
+            node_id=1037, node_abbr='STFRSB',
+            node_name='ST FRANCIS SOUTHBOUND')
         self.nodes[1037].stops.add(self.stops[1286])
         # Replace the 11Uti/11Uti timing node
         self.linedirs['880F-0'].stopbyline_set.filter(seq=2).update(
@@ -628,7 +630,7 @@ Pattern      123Ar            Arr MMS2  Lv MMS2  Adm/MemE
             node_abbr='LV MMS2', site_name='Midtown Memorial Station',
             lat='36.113915', lon='-95.888784', in_service=True)
         self.nodes[787] = self.signup.node_set.create(
-            node_id=787, abbr='Arr MMS2', name='MMS BAY 02')
+            node_id=787, node_abbr='Arr MMS2', node_name='MMS BAY 02')
         self.nodes[787].stops.add(self.stops[6650])
         self.linedirs['100-0'].stopbyline_set.create(
             stop=self.stops[6650], node=self.nodes[787], seq=3)
@@ -637,7 +639,7 @@ Pattern      123Ar            Arr MMS2  Lv MMS2  Adm/MemE
             linedir=self.linedirs['100-0'])
         # Lv MMS2/MBAY2
         self.nodes[788] = self.signup.node_set.create(
-            node_id=788, abbr='Lv MMS2', name='MMS Bay 2')
+            node_id=788, node_abbr='Lv MMS2', node_name='MMS Bay 2')
         self.nodes[788].stops.add(self.stops[6650])
         self.linedirs['100-0'].stopbyline_set.create(
             stop=self.stops[6650], node=self.nodes[788], seq=4)
@@ -662,4 +664,3 @@ Pattern      123Ar            Arr MMS2  Lv MMS2  Adm/MemE
         self.assertEqual(lv.node, self.nodes[788])
         self.assertTrue(lv.scheduled, True)
         self.assertEqual(arr.departure, lv)
-

@@ -8,6 +8,7 @@ from mtta.models import (
 class LineAdmin(admin.ModelAdmin):
     raw_id_fields = ('signup',)
     list_filter = ('signup',)
+    readonly_fields = ('attributes',)
 
 
 class LineDirectionAdmin(admin.ModelAdmin):
@@ -17,8 +18,10 @@ class LineDirectionAdmin(admin.ModelAdmin):
 
 class NodeAdmin(admin.ModelAdmin):
     raw_id_fields = ('stops',)
-    search_fields = ('node_id', 'abbr', 'stops__stop_abbr', 'stops__node_abbr')
-    list_display = ('__unicode__', 'name')
+    search_fields = (
+        'node_id', 'node_abbr', 'node_name', 'stops__stop_abbr',
+        'stops__node_abbr')
+    list_display = ('__unicode__', 'node_name', 'node_abbr')
 
 
 class PatternAdmin(admin.ModelAdmin):
@@ -41,6 +44,7 @@ class StopAdmin(admin.ModelAdmin):
     raw_id_fields = ('signup',)
     list_filter = ('signup',)
     search_fields = ('stop_id', 'stop_abbr')
+    readonly_fields = ('attributes',)
 
 
 class StopByLineAdmin(admin.ModelAdmin):
@@ -50,7 +54,8 @@ class StopByLineAdmin(admin.ModelAdmin):
         'stop__node_abbr', 'node__node_abbr')
     list_filter = ('stop__signup', 'linedir__line',)
     list_display = ('__unicode__', 'line', 'seq', 'stop', 'node')
-    
+    readonly_fields = ('attributes',)
+
     def line(self, instance):
         return str(instance.linedir.line)
 
@@ -62,7 +67,8 @@ class StopByPatternAdmin(admin.ModelAdmin):
         'stop__node_abbr', 'node__abbr')
     list_filter = ('stop__signup', 'linedir__line',)
     list_display = ('__unicode__', 'pattern', 'seq', 'line', 'stop', 'node')
-    
+    readonly_fields = ('attributes',)
+
     def line(self, instance):
         return str(instance.linedir.line)
 
@@ -76,14 +82,16 @@ class TripDayAdmin(admin.ModelAdmin):
 class TripStopAdmin(admin.ModelAdmin):
     raw_id_fields = ('tripday', 'stop', 'node')
     list_filter = ('stop__signup', 'tripday__linedir__line',)
-    list_display = ('__unicode__', 'tripday', 'seq', 'stop_abbr', 'stop', 'node_abbr', 'node')
+    list_display = (
+        '__unicode__', 'tripday', 'seq', 'stop_abbr', 'stop', 'node_abbr',
+        'node')
 
 
 class TripTimeAdmin(admin.ModelAdmin):
     raw_id_fields = ('trip', 'tripstop')
     list_filter = ('trip__tripday__linedir__line',)
     list_display = ('__unicode__', 'trip', 'tripstop', 'stop', 'time')
-    
+
     def stop(self, instance):
         return str(instance.tripstop.stop)
 
