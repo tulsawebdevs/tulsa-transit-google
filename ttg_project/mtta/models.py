@@ -633,10 +633,10 @@ class Stop(DbfBase):
     '''A stop from stops.dbf'''
     signup = models.ForeignKey(SignUp)
     stop_id = models.IntegerField(db_index=True)
-    stop_abbr = models.CharField(max_length=7, db_index=True)
+    stop_abbr = models.CharField(max_length=8, db_index=True)
     stop_name = models.CharField(max_length=50)
     node_abbr = models.CharField(max_length=8, blank=True)
-    site_name = models.CharField(max_length=50, blank=True)
+    site_name = models.CharField(max_length=80, blank=True)
     lat = models.DecimalField(
         'Latitude', max_digits=13, decimal_places=8,
         help_text='WGS 84 latitude of stop or station')
@@ -1010,7 +1010,7 @@ class TripStop(models.Model):
     '''A stop on a TripDay'''
     tripday = models.ForeignKey(TripDay)
     stop = models.ForeignKey(Stop, null=True, blank=True)
-    stop_abbr = models.CharField(max_length=7)
+    stop_abbr = models.CharField(max_length=8)
     node = models.ForeignKey(Node, null=True, blank=True)
     node_abbr = models.CharField(max_length=8, blank=True)
     seq = models.IntegerField()

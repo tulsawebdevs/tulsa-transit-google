@@ -1,5 +1,7 @@
 # Detect deviations from PEP8 standard formatting 
 pep8
+# Detect missing or unused variables
+pyflakes
 
 # Command-line interpreter and debugger with auto-completion
 ipython
@@ -14,4 +16,7 @@ docutils==0.8.1
 
 # For ./manage.py runserver_plus
 Werkzeug
+
+# For postgres linkage
+psycopg2
 
