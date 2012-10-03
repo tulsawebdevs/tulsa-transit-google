@@ -80,7 +80,7 @@ class TripDayAdmin(admin.ModelAdmin):
 
 
 class TripStopAdmin(admin.ModelAdmin):
-    raw_id_fields = ('tripday', 'stop', 'node')
+    raw_id_fields = ('tripday', 'stop', 'node', 'arrival')
     list_filter = ('stop__signup', 'tripday__linedir__line',)
     list_display = (
         '__unicode__', 'tripday', 'seq', 'stop_abbr', 'stop', 'node_abbr',
