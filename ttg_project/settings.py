@@ -1,15 +1,12 @@
 # Django settings for ttg_project project.
 
-try:
-    import docutils
-except ImportError:
-    ENABLE_ADMIN_DOCS=False
-else:
-    ENABLE_ADMIN_DOCS=True
-
 import os.path
+import sys
+
 ROOT = os.path.dirname(os.path.abspath(__file__))
 path = lambda *a: os.path.join(ROOT, *a)
+
+sys.path.append(path('..','transitfeed'))
 
 DEBUG = False
 TEMPLATE_DEBUG = DEBUG
@@ -139,8 +136,16 @@ INSTALLED_APPS = [
     'django.contrib.admin',
     'ttg',
     'south',
+    'multigtfs',
+    'mtta',
 ]
-if ENABLE_ADMIN_DOCS:
+
+try:
+    import docutils
+except ImportError:
+    ENABLE_ADMIN_DOCS=False
+else:
+    ENABLE_ADMIN_DOCS=True
     INSTALLED_APPS.append('django.contrib.admindocs')
 
 # A sample logging configuration. The only tangible logging
@@ -171,3 +176,7 @@ try:
 except ImportError:
     pass
 
+try:
+    INSTALLED_APPS.extend(LOCAL_INSTALLED_APPS)
+except NameError:
+    pass

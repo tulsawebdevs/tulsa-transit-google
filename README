@@ -1,58 +1,38 @@
-The project starts!
-
+This project is for converting is the code a transit 'signup' from the
+Metropolitan Tulsa Transit Authority (MTTA) into a General Transit Feed
+Specification (GTFS), that can be used with other transit software such as
+OpenTripPlanner.  Our goal is to get this data onto Google Maps and any other
+publicly available transit database.
+                
 To run the project:
 
-1. Run './make_bootstrap.py' to make bootstrap.py
-2. Run './bootstrap.py .'  to download the third-party libraries in a virtualenv
-3. Run 'source ./bin/activate' to activate the virtualenv
+1. Install python, pip, virtualenv, and virtualenvwrapper
+2. Run `mkvirtualenv ttg` to create the new virtualenv
+3. Run `pip install -r requirements.txt` to download the third-party libraries
 4. Extract data from the Tulsa Transit Authority into the input folder.  We haven't gotten clearance to distribute this data, so please don't check it into the project.
-5. Run ./parser.py to parse the input data into the output folder
-6. Run 'python transitfeed/feedvalidator.py output/feed/feed.zip' to validate
-7. Run 'python transitfeed/schedule_viewer.py output/feed/feed.zip' to view the schedule
+5. Change to the `ttg_project` folder, copy `local_settings.example.py` to `local_setting.py`, change as needed.
+6. Run `./manage.py syncdb; ./manage.py migrate` to create a new database.
+6. Run `./manage.py importmttasignup` to import into SignUp #1
+6. Run `./manage.py copymttatogtfs 1` to copy SignUp #1 to Feed #1 
+7. Run `./manage.py exportgtfs --name feed.zip 1` to export Feed #1 to feed.zip
+8. Run `feedvalidator.py feed.zip` to validate the feed
+9. Run `schedule_viewer.py feed.zip` to view the schedule
+10. Run `/manage.py runserver` to start up Django.  The Django admin may be the only interesting part.
 
 Required files for this project
 ===============================
-
-agency.txt - Required. This file contains information about one or more transit agencies that provide the data in this feed.
-
-stops.txt - Required. This file contains information about individual locations where vehicles pick up or drop off passengers.
-
-routes.txt - Required. This file contains information about a transit organization's routes. A route is a group of trips that are displayed to riders as a single service.
-
-trips.txt - Required. This file lists all trips and their routes. A trip is a sequence of two or more stops that occurs at specific time.
-
-stop_times.txt - Required. This file lists the times that a vehicle arrives at and departs from individual stops for each trip.
-
-calendar.txt - Required. This file defines dates for service IDs using a weekly schedule. Specify when service starts and ends, as well as days of the week where service is available.
-
-To get started:
-
-    ./bootstrap.py .     # Create virtual environment.  The trailing '.' is important
-    source bin/activate  # Activate the virtual environment
-    ./convert.py         # Convert from the dBase originals to SQLite output.pdb
-    deactivate           # Leave the virtual environment
-
-If bootstrap.py fails, try running ./make_bootstrap.py first.  To
-
-This will convert the Tulsa Transit Authority data in the originals folder to
-a sqlite database output.db.
-
-The data is from the Tulsa Transit Authority.  Luke has been in contact with
-Jeremy Luttrell and Monique Bizet.  We haven't gotten clearance to make this
-data publicly available, so please don't distribute yet.
-
-Here's the text of the email from April 08, 2011:
-
-    Here is the shapefile data for the March 2011 signup. The corrections
-    for the stop accuracy for the online trip planner are on the March
-    2011 CI signup which will be available in a few weeks. When it is
-    ready we will send it to you so your data is as accurate as possible.
+You'll need a signup file from the Tulsa Transit Authority to populate your database.  Contact John Whitlock or Luke Crouch to get a copy.
 
 Other useful information:
+
 * http://www.ntdprogram.gov/ntdprogram/Glossary.htm
 * http://code.google.com/transit/spec/transit_feed_specification.html
+* http://nrtap.zendesk.com/home
+* http://tripplanner.tulsawebdevs.org/index.html
+* http://www.gtfs-data-exchange.com/
 
 John Whitlock
 John-Whitlock@ieee.org
+http://tulsawebdevs.org
 
 On freenode: #tulsawebdevs

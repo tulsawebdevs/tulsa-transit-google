@@ -1,6 +1,22 @@
+# Detect deviations from PEP8 standard formatting 
 pep8
-# Requires installing the GDAL libraries first
-gdal
+# Detect missing or unused variables
+pyflakes
+
+# Command-line interpreter and debugger with auto-completion
+ipython
 ipdb
+
+# Better testing
+django-nose==1.0
+nose>=1.0
+
 # For admin documentation
 docutils==0.8.1
+
+# For ./manage.py runserver_plus
+Werkzeug
+
+# For postgres linkage
+psycopg2
+

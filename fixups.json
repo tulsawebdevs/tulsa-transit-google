@@ -1,0 +1,134 @@
+{"stations":[
+{
+    "name": "Denver Ave. Station",
+    "id": 10000,
+    "latitude": 36.152025,
+    "longitude": -95.993349,
+    "stops": [
+        {
+            "id": 6639,
+            "name": "DAS Bay1"
+        }, {
+            "id": 6640,
+            "name": "DAS Bay2"
+        }, {
+            "id": 6641,
+            "name": "DAS Bay3"
+        }, {
+            "id": 6642,
+            "name": "DAS Bay4"
+        }, {
+            "id": 6643,
+            "name": "DAS Bay5"
+        }, {
+            "id": 6644,
+            "name": "DAS Bay6"
+        }, {
+            "id": 6645,
+            "name": "DAS Bay7"
+        }, {
+            "id": 6646,
+            "name": "DAS Bay8"
+        }, {
+            "id": 6647,
+            "name": "DAS Bay9"
+        }, {
+            "id": 6648,
+            "name": "DAS Bay10"
+        }, {
+            "id": 6325,
+            "name": "S Cheyenne Ave&W 3Rd St S"
+        }]
+},
+{
+    "name": "Memorial Midtown Station",
+    "id": 10001,
+    "latitude": 36.114059,
+    "longitude": -95.888785,
+    "stops": [
+        {
+            "id": 6649,
+            "name": "MMS Bay1"
+        }, {
+            "id": 6650,
+            "name": "MMS Bay2"
+        }, {
+            "id": 6651,
+            "name": "MMS Bay3"  
+        }, {
+            "id": 6652,
+            "name": "MMS Bay4"
+        }, {
+            "id": 6653,
+            "name": "MMS Bay5"
+        }, {
+            "id": 6654,
+            "name": "MMS Bay6"
+        }, {
+            "id": 6655,
+            "name": "MMS Bay7"
+        }, {
+            "id": 6656,
+            "name": "MMS Bay8"
+        }, {
+            "id": 6657,
+            "name": "MMS Bay9"
+        }, {
+            "id": 6658,
+            "name": "MMS Bay10"
+        }]
+}],
+"same_stops": [
+    {
+        "original_id": 2458, 
+        "original_name": "Main/10th S-SW", 
+        "replacement_id":  2713, 
+        "replacement_name": "S Main/W 10th SB"
+    },     
+    {
+        "original_id": 1, 
+        "original_name": "Cincinnati/E 61st", 
+        "replacement_id": 2646, 
+        "replacement_name": "N Cincinnati/E 61st"
+    }, 
+    {
+        "original_id": 5833, 
+        "original_name": "S Peoria Ave&E 31St St S", 
+        "replacement_id": 6072, 
+        "replacement_name": "S Peoria Ave&E 31St St S"
+    }, 
+    {
+        "original_id": 5707, 
+        "original_name": "S Boulder Ave&W 21st St S", 
+        "replacement_id": 6743, 
+        "replacement_name": "S Boulder Park Dr & W 21st St S"
+    }, 
+    {
+        "original_id": 5822, 
+        "original_name": "S Peoria Ave&E 31St St S", 
+        "replacement_id": 6072, 
+        "replacement_name": "S Peoria Ave&E 31St St S"
+    }, 
+    {
+        "original_id": 5077, 
+        "original_name": "E 10Th St S&S Detroit Ave", 
+        "replacement_id": 6418, 
+        "replacement_name": "E 10Th St S&S Detroit Ave"
+    }, 
+    {
+        "original_id": 2745, 
+        "original_name": "Main/10th E-SE", 
+        "replacement_id": 2713, 
+        "replacement_name": "S Main/W 10th SB"
+    }
+],
+"short_name_map": {
+    "508FLEX": "508F",
+    "840FLEX": "840F",
+    "860FLEX": "860F",
+    "860SFLX": "860SF",
+    "870FLEX": "870F",
+    "880FLEX": "880F",
+    "890FLEX": "890F"
+}
+}

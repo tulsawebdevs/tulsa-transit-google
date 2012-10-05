@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # encoding: utf-8
 
-import csv
 import getopt
 import os
 import sqlite3
@@ -72,9 +71,9 @@ def line_dir_transformer(value):
 
 
 def hold_short_name(value):
-    global __tmp_short_name
+    global __tmp_short_name, __short_name_map
     __tmp_short_name = value
-    return value
+    return __short_name_map.get(value, value)
 
 
 def strip_short_name(value):
@@ -99,6 +98,8 @@ DBF_MAPPING = {
             ('lon', 'stop_lon', latlon_transformer, latlon_validator),
             ('SiteName', 'stop_desc'),
             ('StopAbbr', 'stop_code'),
+            ('', 'location_type', lambda x: 0),
+            ('', 'parent_station', lambda x: ''),
             ('', 'active', lambda x: 0),
         )},
     'lines': {
@@ -125,6 +126,7 @@ DBF_MAPPING = {
 }
 
 __tmp_short_name = ''
+__short_name_map = dict()
 
 
 def is_useful(full_path):
@@ -146,8 +148,10 @@ def get_key_name(full_path):
         return None
 
 
-def read(dbf_path, database, verbose=False):
+def read(dbf_path, database, verbose=False, fixups=dict()):
     '''Read an MTTA dbf file into the database'''
+    global __short_name_map
+    __short_name_map = fixups.get('short_name_map', dict())
     key_name = get_key_name(dbf_path)
     feed = DBF_MAPPING[key_name]
     table_name = feed['table']

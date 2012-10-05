@@ -32,9 +32,11 @@ class MediaFile(models.Model):
             self.local_name = fmt % self.added_at.strftime('%Y%m%d.%H%M')
         if not self.source:
             self.source = 'Uploaded'
-        local_path = os.path.join(settings.MEDIA_ROOT, self.local_name)
-        with open(local_path, 'wb+') as destination:
+        with open(self.abspath(), 'wb+') as destination:
             for chunk in request_file.chunks():
                 destination.write(chunk)
         self.save()
+
+    def abspath(self):
+        return os.path.join(settings.MEDIA_ROOT, self.local_name)
 
