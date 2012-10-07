@@ -1,8 +1,8 @@
-from datetime import datetime
 import os.path
 
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 class MediaFile(models.Model):
     '''An uploaded or generated file'''
@@ -24,7 +24,7 @@ class MediaFile(models.Model):
     
     def save_upload(self, request_file, file_type='I'):
         if not self.added_at:
-            self.added_at = datetime.now()
+            self.added_at = timezone.now()
         if not self.file_type:
             self.file_type = file_type
         if not self.local_name:

@@ -1,4 +1,3 @@
-from datetime import datetime
 from optparse import make_option
 import logging
 

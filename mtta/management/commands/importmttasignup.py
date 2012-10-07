@@ -1,8 +1,8 @@
-from datetime import datetime
 from optparse import make_option
 import logging
 
 from django.core.management.base import BaseCommand, CommandError
+from django.utils import timezone
 
 from mtta.models import SignUp
 
@@ -37,6 +37,6 @@ class Command(BaseCommand):
         signup = SignUp.objects.create(name=name)
         signup.import_folder(input_folder)
         if signup.name == SignUp._unset_name:
-            signup.name = 'Imported at %s' % datetime.now()
+            signup.name = 'Imported at %s' % timezone.now()
             signup.save()
         self.stdout.write("Successfully imported SignUpFeed %s\n" % (signup))

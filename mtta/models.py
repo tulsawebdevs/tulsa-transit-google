@@ -1,10 +1,10 @@
 from collections import defaultdict
-import datetime
 import logging
 import re
 import os
 
 from django.db import models
+from django.utils import timezone
 from django_extensions.db.fields.json import JSONField
 import dbfpy.dbf
 import shapefile
@@ -132,7 +132,7 @@ class SignUp(models.Model):
         for line in self.line_set.all():
             logger.info('Exporting data for line %s...' % line)
             line.copy_to_feed(feed)
-        signup_export.finished = datetime.datetime.now()
+        signup_export.finished = timezone.now()
         return feed
 
     def __unicode__(self):
