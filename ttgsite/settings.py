@@ -16,12 +16,18 @@ MANAGERS = ADMINS
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.', # Add 'postgresql_psycopg2', 'mysql', 'sqlite3' or 'oracle'.
-        'NAME': '',                      # Or path to database file if using sqlite3.
-        'USER': '',                      # Not used with sqlite3.
-        'PASSWORD': '',                  # Not used with sqlite3.
-        'HOST': '',                      # Set to empty string for localhost. Not used with sqlite3.
-        'PORT': '',                      # Set to empty string for default. Not used with sqlite3.
+        # Add 'postgresql_psycopg2', 'mysql', 'sqlite3' or 'oracle'.
+        'ENGINE': 'django.db.backends.',
+        # Name or path to database file if using sqlite3.
+        'NAME': '',
+        # User for connection, not used with sqlite3
+        'USER': '',
+        # Password for connection, not used with sqlite3
+        'PASSWORD': '',
+        # Hostname for connection, empty for default, not used with sqlite3
+        'HOST': '',
+        # Port for connection, empty for default, not used with sqlite3
+        'PORT': '',
     }
 }
 
@@ -79,7 +85,7 @@ STATICFILES_DIRS = (
 STATICFILES_FINDERS = (
     'django.contrib.staticfiles.finders.FileSystemFinder',
     'django.contrib.staticfiles.finders.AppDirectoriesFinder',
-#    'django.contrib.staticfiles.finders.DefaultStorageFinder',
+    #  'django.contrib.staticfiles.finders.DefaultStorageFinder',
 )
 
 # Make this unique, and don't share it with anybody.
@@ -89,7 +95,7 @@ SECRET_KEY = 'dzae)0!u#s9v7#^ur88ohu)2a3glc!o)(b(cc8@7de5xh36w*h'
 TEMPLATE_LOADERS = (
     'django.template.loaders.filesystem.Loader',
     'django.template.loaders.app_directories.Loader',
-#     'django.template.loaders.eggs.Loader',
+    #  'django.template.loaders.eggs.Loader',
 )
 
 MIDDLEWARE_CLASSES = (
@@ -108,7 +114,8 @@ ROOT_URLCONF = 'ttgsite.urls'
 WSGI_APPLICATION = 'ttgsite.wsgi.application'
 
 TEMPLATE_DIRS = (
-    # Put strings here, like "/home/html/django_templates" or "C:/www/django/templates".
+    # Put strings here, like "/home/html/django_templates" or
+    #     "C:/www/django/templates".
     # Always use forward slashes, even on Windows.
     # Don't forget to use absolute paths, not relative paths.
 )
@@ -130,9 +137,10 @@ INSTALLED_APPS = [
 try:
     import docutils
 except ImportError:
-    ENABLE_ADMIN_DOCS=False
+    ENABLE_ADMIN_DOCS = False
 else:
-    ENABLE_ADMIN_DOCS=True
+    assert docutils
+    ENABLE_ADMIN_DOCS = True
     INSTALLED_APPS.append('django.contrib.admindocs')
 
 # A sample logging configuration. The only tangible logging
@@ -165,7 +173,7 @@ LOGGING = {
 }
 
 try:
-    from local_settings import *
+    from local_settings import *  # NOQA
 except ImportError:
     pass
 
@@ -173,3 +181,9 @@ try:
     INSTALLED_APPS.extend(LOCAL_INSTALLED_APPS)
 except NameError:
     pass
+
+if 'test' in sys.argv:
+    DATABASES['default'] = {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': 'mydatabase'
+    }

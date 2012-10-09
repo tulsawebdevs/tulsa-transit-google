@@ -1,7 +1,8 @@
-# Detect deviations from PEP8 standard formatting 
-pep8
-# Detect missing or unused variables
-pyflakes
+# Detect deviations from PEP8 standard formatting, as well as unused
+# and missing variables
+flake8
+# Show what lines are run by test suite
+coverage
 
 # Command-line interpreter and debugger with auto-completion
 ipython

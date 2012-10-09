@@ -1,7 +1,5 @@
-from django.conf import settings
 from django.contrib import messages
 from django.core.cache import cache
-from django.core.urlresolvers import reverse
 from django.http import HttpResponse
 from django.shortcuts import render_to_response
 from django.template import RequestContext
@@ -9,6 +7,7 @@ import transitfeed
 
 from forms import UploadFileForm
 from models import MediaFile
+
 
 def home(request):
     '''View for the home page'''
@@ -26,9 +25,9 @@ def feed_zip(request, version):
 def viewer(request, version):
     '''View for the schedule viewer'''
     current_feed = MediaFile.objects.filter(file_type='F').latest('added_at')
-    schedule_key = 'schedule.%d' % current_feed.id 
+    schedule_key = 'schedule.%d' % current_feed.id
     schedule = cache.get(schedule_key)
-    if not schedule:    
+    if not schedule:
         schedule = transitfeed.Schedule(
             problem_reporter=transitfeed.ProblemReporter())
         current_feed = MediaFile.objects.filter(

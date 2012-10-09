@@ -178,6 +178,7 @@ class FeedInfo(models.Model):
         feed.feedinfo_set.get_or_create(
             publisher_name=self.name, publisher_url=self.url, lang=self.lang)
 
+
 class DbfBase(models.Model):
     '''Base class for models from .DBF data'''
     attributes = JSONField(default=[])
