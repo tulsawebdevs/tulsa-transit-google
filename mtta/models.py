@@ -105,7 +105,9 @@ class SignUp(models.Model):
 
         def readz(path):
             '''Get a seekable file from the_zip'''
-            return StringIO.StringIO(the_zip.open(path, 'r').read())
+            out = StringIO.StringIO(the_zip.open(path, 'r').read())
+            out.name = path
+            return out
 
         for path in zip_paths:
             folder, filename = os.path.split(path)
