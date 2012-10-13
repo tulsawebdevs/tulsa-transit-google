@@ -8,10 +8,10 @@ from django_extensions.db.models import TimeStampedModel
 
 class MediaFile(TimeStampedModel):
     '''An uploaded or generated file'''
-    IMPORT_FILE = u'I'
+    MTTA_SIGNUP = u'S'
     GTFS_FILE = u'F'
     TYPE_CHOICES = (
-        (IMPORT_FILE, 'Import .zip'),
+        (MTTA_SIGNUP, 'MTTA Signup .zip'),
         (GTFS_FILE, 'GTFS Feed .zip'),
     )
 

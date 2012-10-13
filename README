@@ -3,16 +3,16 @@ Metropolitan Tulsa Transit Authority (MTTA) into a General Transit Feed
 Specification (GTFS), that can be used with other transit software such as
 OpenTripPlanner.  Our goal is to get this data onto Google Maps and any other
 publicly available transit database.
-                
+
 To run the project:
 
 1. Install python, pip, virtualenv, and virtualenvwrapper
 2. Run `mkvirtualenv ttg` to create the new virtualenv
 3. Run `pip install -r requirements.txt` to download the third-party libraries
-4. Extract data from the Tulsa Transit Authority into the input folder.  We haven't gotten clearance to distribute this data, so please don't check it into the project.
-5. Change to the `ttg_project` folder, copy `local_settings.example.py` to `local_setting.py`, change as needed.
-6. Run `./manage.py syncdb; ./manage.py migrate` to create a new database.
-6. Run `./manage.py importmttasignup` to import into SignUp #1
+4. Get a copy of the Tulsa Transit Authority's signup data.  It should be a zip file.
+5. Change to the `ttgsite` folder, copy `local_settings.example.py` to `local_settings.py`, change as needed.
+6. Back in the main folder, run `./manage.py syncdb; ./manage.py migrate` to create a new database.
+6. Run `./manage.py importmttasignup signup.zip` to import into SignUp #1
 6. Run `./manage.py copymttatogtfs 1` to copy SignUp #1 to Feed #1 
 7. Run `./manage.py exportgtfs --name feed.zip 1` to export Feed #1 to feed.zip
 8. Run `feedvalidator.py feed.zip` to validate the feed

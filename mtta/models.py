@@ -48,7 +48,7 @@ def _force_to_file(obj):
 class SignUp(models.Model):
     name = models.CharField(max_length=255)
     created = models.DateTimeField(auto_now_add=True)
-    feeds = models.ManyToManyField(Feed, through='SignupExports')
+    feeds = models.ManyToManyField(Feed, through='SignupExport')
     _unset_name = '<unset>'
     _data_file_names = (
         ('lines', 'line'),
@@ -171,7 +171,7 @@ class SignUp(models.Model):
 
     def copy_to_feed(self):
         feed = Feed.objects.create(name=self.name)
-        signup_export = SignupExports.objects.create(
+        signup_export = SignupExport.objects.create(
             signup=self, feed=feed, started=feed.created)
         agency = AgencyInfo.objects.get(pk=1)
         agency.copy_to_feed(feed)
@@ -181,23 +181,30 @@ class SignUp(models.Model):
             logger.info('Exporting data for line %s...' % line)
             line.copy_to_feed(feed)
         signup_export.finished = timezone.now()
+        signup_export.save()
         return feed
 
     def __unicode__(self):
         return "%s-%s" % (self.id, self.name or '(No Name)')
 
 
-class SignupExports(models.Model):
+class SignupExport(models.Model):
     signup = models.ForeignKey(SignUp)
     feed = models.ForeignKey(Feed)
     started = models.DateTimeField()
     finished = models.DateTimeField(null=True, blank=True)
 
+    def __unicode__(self):
+        return "%s to %s" % (self.signup, self.feed)
 
-class ShapeAttributes(models.Model):
+
+class ShapeAttribute(models.Model):
     signup = models.ForeignKey(SignUp)
     name = models.CharField(max_length=20)
     attributes = JSONField(default=[])
+
+    def __unicode__(self):
+        return "%s-%s" % (self.signup.id, self.name)
 
 
 class AgencyInfo(models.Model):
@@ -246,7 +253,7 @@ class DbfBase(models.Model):
 
         Returns: tuple of:
             fields - List of dictionaries describing the DBF fields, stored in
-                ShapeAttributes as well
+                ShapeAttribute as well
             rows - List of dictionaries for each DBF row, with only the
                 important values (either used in the model fields, or value is
                 different from 50% of the other values for that field)
@@ -329,7 +336,7 @@ class DbfBase(models.Model):
                 logger.warning(msg)
 
         # Store the field definitions in the database
-        ShapeAttributes.objects.create(
+        ShapeAttribute.objects.create(
             signup=signup, attributes=fields, name=cls.__name__)
 
         # Convert the rows to minimized dicts
@@ -523,6 +530,13 @@ class LineDirection(models.Model):
     linedir_id = models.IntegerField(db_index=True)
     line = models.ForeignKey(Line)
     name = models.CharField(max_length=20)
+    _facing_dir = {
+        'To Downtown': 'in',
+        'From Downtown': 'out',
+        'CounterClock': 'CC',
+        'Clock': 'CL',
+        'Clockwise': 'CL',
+    }
 
     class Meta:
         unique_together = ('linedir_id', 'line')
@@ -534,6 +548,10 @@ class LineDirection(models.Model):
     def copy_to_feed(self, feed, gtfs_route):
         for tripday in self.tripday_set.all():
             tripday.copy_to_feed(feed, gtfs_route)
+
+    def to_facing_dir(self):
+        '''Map name to a facing direction'''
+        return self._facing_dir.get(self.name)
 
 
 class Pattern(models.Model):
@@ -686,6 +704,7 @@ class Stop(DbfBase):
     stop_name = models.CharField(max_length=50)
     node_abbr = models.CharField(max_length=8, blank=True)
     site_name = models.CharField(max_length=80, blank=True)
+    facing_dir = models.CharField(max_length=3, blank=True)
     lat = models.DecimalField(
         'Latitude', max_digits=13, decimal_places=8,
         help_text='WGS 84 latitude of stop or station')
@@ -710,7 +729,8 @@ class Stop(DbfBase):
         ('SITENAME', 'site_name'),
         ('LAT', 'lat'),
         ('LON', 'lon'),
-        ('INSERVICE', 'in_service'))
+        ('INSERVICE', 'in_service'),
+        ('FACINGDIR', 'facing_dir'))
 
     convert_LAT = DbfBase.convert_latlon
     convert_LON = DbfBase.convert_latlon
@@ -1259,6 +1279,15 @@ class TripStop(models.Model):
                             candidates.append(s.nodes.get(node_abbr=node_abbr))
                     if len(candidates) == 1:
                         stop = candidates[0]
+                    else:
+                        # Try lookup by facing direction
+                        facing_dir = tripday.linedir.to_facing_dir()
+                        if facing_dir:
+                            fstops = signup.stop_set.filter(
+                                stop_abbr=stop_abbr, in_service=True,
+                                facing_dir=facing_dir).order_by('stop_id')
+                            if len(fstops) == 1:
+                                stop = fstops[0]
                 if stop:
                     params['stop'] = stop
                     if stop.nodes.count() == 1:
@@ -1266,8 +1295,10 @@ class TripStop(models.Model):
                 else:
                     logger.warning(
                         "On tripday %s, at trip stop %s, %d stops found for"
-                        " stop abbreviation '%s'. Leaving stop unassigned" %
-                        (tripday, seq, len(stops), stop_abbr))
+                        " stop abbreviation '%s'. Stop IDs %s."
+                        " Leaving stop unassigned" %
+                        (tripday, seq, len(stops), stop_abbr,
+                         [s.stop_id for s in stops]))
         return tripstop_params
 
 

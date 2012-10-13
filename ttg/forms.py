@@ -21,7 +21,7 @@ class UploadFileForm(forms.ModelForm):
     def save(self, *args, **kwargs):
         self.instance.source = MediaFile.UPLOADED
         instance = super(UploadFileForm, self).save(*args, **kwargs)
-        if instance.file_type == MediaFile.IMPORT_FILE:
+        if instance.file_type == MediaFile.MTTA_SIGNUP:
             import_mtta_signup.delay(instance.id)
         return instance
 
