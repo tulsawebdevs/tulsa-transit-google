@@ -24,4 +24,3 @@ class UploadFileForm(forms.ModelForm):
         if instance.file_type == MediaFile.MTTA_SIGNUP:
             import_mtta_signup.delay(instance.id)
         return instance
-

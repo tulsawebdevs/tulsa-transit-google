@@ -1,8 +1,4 @@
-import os.path
-
-from django.conf import settings
 from django.db import models
-from django.utils import timezone
 from django_extensions.db.models import TimeStampedModel
 
 
