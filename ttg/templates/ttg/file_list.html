@@ -6,9 +6,9 @@
 <tr><th>File Name</th><th>Date Added</th><th>Source</th></tr>
 {% for f in files %}
 <tr>
-    <td><a href="{{MEDIA_URL}}{{f.local_name}}">{{f.local_name}}</td>
-    <td>{{f.added_at}}</td>
-    <td>{{f.source}}</td>
+    <td><a href="{{f.file.url}}">{{f.file.name}}</td>
+    <td>{{f.created}}</td>
+    <td>{{f.get_source_display}}</td>
 </tr>
 {% empty %}
 <tr><td span=3><em>None</em></td></tr>

@@ -5,7 +5,8 @@ http://downloads.sourceforge.net/project/dbfpy/dbfpy/2.2.5/dbfpy-2.2.5.tar.gz?r=
 
 Django==1.4.1
 django-extensions==0.9
-South==0.7.3
+South==0.7.6
+celery==3.0.11
 psycopg2==2.4.4
 pytz==2011n
 simplejson==2.3.2
