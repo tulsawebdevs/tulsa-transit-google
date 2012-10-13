@@ -48,7 +48,7 @@ def _force_to_file(obj):
 class SignUp(models.Model):
     name = models.CharField(max_length=255)
     created = models.DateTimeField(auto_now_add=True)
-    feeds = models.ManyToManyField(Feed, through='SignupExports')
+    feeds = models.ManyToManyField(Feed, through='SignupExport')
     _unset_name = '<unset>'
     _data_file_names = (
         ('lines', 'line'),
@@ -171,7 +171,7 @@ class SignUp(models.Model):
 
     def copy_to_feed(self):
         feed = Feed.objects.create(name=self.name)
-        signup_export = SignupExports.objects.create(
+        signup_export = SignupExport.objects.create(
             signup=self, feed=feed, started=feed.created)
         agency = AgencyInfo.objects.get(pk=1)
         agency.copy_to_feed(feed)
@@ -181,23 +181,30 @@ class SignUp(models.Model):
             logger.info('Exporting data for line %s...' % line)
             line.copy_to_feed(feed)
         signup_export.finished = timezone.now()
+        signup_export.save()
         return feed
 
     def __unicode__(self):
         return "%s-%s" % (self.id, self.name or '(No Name)')
 
 
-class SignupExports(models.Model):
+class SignupExport(models.Model):
     signup = models.ForeignKey(SignUp)
     feed = models.ForeignKey(Feed)
     started = models.DateTimeField()
     finished = models.DateTimeField(null=True, blank=True)
 
+    def __unicode__(self):
+        return "%s to %s" % (self.signup, self.feed)
 
-class ShapeAttributes(models.Model):
+
+class ShapeAttribute(models.Model):
     signup = models.ForeignKey(SignUp)
     name = models.CharField(max_length=20)
     attributes = JSONField(default=[])
+
+    def __unicode__(self):
+        return "%s-%s" % (self.signup.id, self.name)
 
 
 class AgencyInfo(models.Model):
@@ -246,7 +253,7 @@ class DbfBase(models.Model):
 
         Returns: tuple of:
             fields - List of dictionaries describing the DBF fields, stored in
-                ShapeAttributes as well
+                ShapeAttribute as well
             rows - List of dictionaries for each DBF row, with only the
                 important values (either used in the model fields, or value is
                 different from 50% of the other values for that field)
@@ -329,7 +336,7 @@ class DbfBase(models.Model):
                 logger.warning(msg)
 
         # Store the field definitions in the database
-        ShapeAttributes.objects.create(
+        ShapeAttribute.objects.create(
             signup=signup, attributes=fields, name=cls.__name__)
 
         # Convert the rows to minimized dicts

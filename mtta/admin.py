@@ -3,7 +3,7 @@ from django.contrib import admin
 from mtta.models import (
     SignUp, Line, LineDirection, Pattern, Stop, Node, StopByLine,
     StopByPattern, Service, TripDay, TripStop, Trip, TripTime,
-    SignupExports, ShapeAttributes)
+    SignupExport, ShapeAttribute)
 
 
 class LineAdmin(admin.ModelAdmin):
@@ -27,7 +27,7 @@ class NodeAdmin(admin.ModelAdmin):
 
 class PatternAdmin(admin.ModelAdmin):
     raw_id_fields = ('linedir',)
-    read_only_fields = ('raw_pattern', 'fixed_pattern')
+    readonly_fields = ('raw_pattern', 'fixed_pattern')
     list_filter = ('linedir__line__signup', 'linedir__line',)
 
 
@@ -38,6 +38,14 @@ class ServiceAdmin(admin.ModelAdmin):
 
 class SignUpAdmin(admin.ModelAdmin):
     pass
+
+
+class SignupExportAdmin(admin.ModelAdmin):
+    pass
+
+
+class ShapeAttributeAdmin(admin.ModelAdmin):
+    readonly_fields = ('attributes', )
 
 
 class StopAdmin(admin.ModelAdmin):
@@ -107,8 +115,8 @@ admin.site.register(Node, NodeAdmin)
 admin.site.register(Pattern, PatternAdmin)
 admin.site.register(Service, ServiceAdmin)
 admin.site.register(SignUp, SignUpAdmin)
-admin.site.register(SignupExports)
-admin.site.register(ShapeAttributes)
+admin.site.register(SignupExport, SignupExportAdmin)
+admin.site.register(ShapeAttribute, ShapeAttributeAdmin)
 admin.site.register(Stop, StopAdmin)
 admin.site.register(StopByLine, StopByLineAdmin)
 admin.site.register(StopByPattern, StopByPatternAdmin)
