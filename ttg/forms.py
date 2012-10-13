@@ -14,7 +14,9 @@ class UploadFileForm(forms.ModelForm):
         fields = ('file_type', 'file')
 
     def clean_file(self):
-        if not is_zipfile(self.files['file']):
+        file = self.files['file']
+        file.open()
+        if not is_zipfile(file):
             raise forms.ValidationError('Uploaded files must be ZIP format.')
         return self.cleaned_data['file']
 
