@@ -9,13 +9,22 @@ schedule data into the
 <a href="https://developers.google.com/transit/gtfs/reference">
 General Transit Feed Specification</a> (GTFS), a necessary step to get Tulsa's
 buses into
-<a href="http://maps.google.com/maps?saddr=fab+lab&daddr=hardesty+library&hl=en&ll=36.08906,-95.920944&spn=0.159528,0.210457&sll=36.087805,-95.908445&sspn=0.15953,0.210457&geocode=Fd2cJwIdecpH-iHxn8YQoB5qiSldhY208-y2hzE9ZpWyKiQm0Q%3BFZ28JQIdVO9I-iEfZtX30cXLKimBDtSqDo62hzFWUu0ERxi5Vw&dirflg=r&ttype=now&noexp=0&noal=0&sort=def&mra=ltm&t=h&z=12&start=0">Google Maps.</a>
+<a href="http://maps.google.com/maps?saddr=fab+lab&daddr=hardesty+library&hl=en&ll=36.08906,-95.920944&spn=0.159528,0.210457&sll=36.087805,-95.908445&sspn=0.15953,0.210457&geocode=Fd2cJwIdecpH-iHxn8YQoB5qiSldhY208-y2hzE9ZpWyKiQm0Q%3BFZ28JQIdVO9I-iEfZtX30cXLKimBDtSqDo62hzFWUu0ERxi5Vw&dirflg=r&ttype=now&noexp=0&noal=0&sort=def&mra=ltm&t=h&z=12&start=0">Google Maps</a>.
 See
 <a href="https://github.com/tulsawebdevs/tulsa-transit-google">
 the project page</a> for more information.
 </p>
 <ul>
-<li><a href="{% url feed_zip version='current' %}">The current GTFS feed</a>
-<li><a href="{% url viewer version='current' %}">View the current GTFS data on a map</a>
+<li><a href="{% url feed_zip version='current' %}">The current GTFS feed</a></li>
+<li><a href="http://tripplanner.tulsawebdevs.org/">View the current GTFS data on a map</a></li>
+{% if user.is_authenticated %}
+<li><a href="{% url file_list %}">View all files / Upload a new file</a></li>
+{% if user.is_staff %}
+<li><a href="/admin/">View the admin</a></li>
+{% endif %}
+<li><a href="{% url logout %}">Logout</a></li>
+{% else %}
+<li><a href="{% url login %}">Login</a></li>
+{% endif %}
 </ul>
 {% endblock %}

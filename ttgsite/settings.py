@@ -2,6 +2,8 @@
 import os.path
 import sys
 
+from django.core.urlresolvers import reverse_lazy
+
 ROOT = os.path.dirname(os.path.abspath(__file__))
 path = lambda *a: os.path.join(ROOT, *a)
 
@@ -134,6 +136,8 @@ INSTALLED_APPS = [
     'multigtfs',
     'mtta',
 ]
+
+LOGIN_REDIRECT_URL = reverse_lazy('home')
 
 try:
     import docutils
