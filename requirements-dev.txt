@@ -21,7 +21,4 @@ Werkzeug
 # For postgres linkage
 psycopg2
 
-# Heroku sets database in the environment
-dj-database-url
-
 transitfeed==1.2.12
