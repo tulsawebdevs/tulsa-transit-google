@@ -1,10 +1,12 @@
 from collections import defaultdict
-import datetime
 import logging
 import re
 import os
+import zipfile
+import StringIO
 
 from django.db import models
+from django.utils import timezone
 from django_extensions.db.fields.json import JSONField
 import dbfpy.dbf
 import shapefile
@@ -56,11 +58,12 @@ class SignUp(models.Model):
         ('stopsbypattern',),
     )
     _names_file = 'NewFieldNames.txt'
+    _stop_trips_start = 'Stop Trips'
 
     def import_folder(self, folder):
+        '''Import data from an MTTA signup that's been extracted to disk'''
         data_files = defaultdict(dict)
         stop_trips = []
-        stop_trips_start = 'Stop Trips'
         for path, dirs, files in os.walk(folder):
             data_name = None
             for f in files:
@@ -75,8 +78,9 @@ class SignUp(models.Model):
 
                 if ext == 'txt':
                     with open(full_path, 'r') as candidate:
-                        first_bits = candidate.read(len(stop_trips_start))
-                    if (first_bits == stop_trips_start):
+                        first_bits = candidate.read(
+                            len(self._stop_trips_start))
+                    if (first_bits == self._stop_trips_start):
                         stop_trips.append(full_path)
             if data_name and self._names_file in files:
                 full_path = os.path.abspath(
@@ -89,6 +93,50 @@ class SignUp(models.Model):
                 raise Exception('No %s found in path %s' % (key, folder))
         if not stop_trips:
             raise Exception('No schedules found in path %s' % folder)
+        self._import(data_files, stop_trips)
+
+    def import_zip(self, zippath_or_file):
+        '''Import data from a unextracted MTTA signup file'''
+        the_zip = zipfile.ZipFile(zippath_or_file)
+        zip_paths = the_zip.namelist()
+        data_files = defaultdict(dict)
+        data_folders = set()
+        stop_trips = []
+
+        def readz(path):
+            '''Get a seekable file from the_zip'''
+            out = StringIO.StringIO(the_zip.open(path, 'r').read())
+            out.name = path
+            return out
+
+        for path in zip_paths:
+            folder, filename = os.path.split(path)
+            full_name = filename.lower()
+            name, ext = os.path.splitext(full_name)
+            ext = ext.replace('.', '')
+            for nameset in self._data_file_names:
+                if name in nameset:
+                    data_name = nameset[0]
+                    data_files[data_name][ext] = readz(path)
+                    data_folders.add((data_name, folder))
+
+            if ext == 'txt':
+                with the_zip.open(path, 'r') as candidate:
+                    first_bits = candidate.read(
+                        len(self._stop_trips_start))
+                if (first_bits == self._stop_trips_start):
+                    stop_trips.append(readz(path))
+        for data_name, data_folder in data_folders:
+            names_file = os.path.join(data_folder, self._names_file)
+            if names_file in zip_paths:
+                data_files[data_name][self._names_file] = readz(names_file)
+
+        for nameset in self._data_file_names:
+            key = nameset[0]
+            if key not in data_files.keys():
+                raise Exception('No %s found in zip file %s' % (key, the_zip))
+        if not stop_trips:
+            raise Exception('No schedules found in zip file %s' % the_zip)
         self._import(data_files, stop_trips)
 
     def _import(self, data_files, stop_trips):
@@ -132,7 +180,7 @@ class SignUp(models.Model):
         for line in self.line_set.all():
             logger.info('Exporting data for line %s...' % line)
             line.copy_to_feed(feed)
-        signup_export.finished = datetime.datetime.now()
+        signup_export.finished = timezone.now()
         return feed
 
     def __unicode__(self):
@@ -177,6 +225,7 @@ class FeedInfo(models.Model):
     def copy_to_feed(self, feed):
         feed.feedinfo_set.get_or_create(
             publisher_name=self.name, publisher_url=self.url, lang=self.lang)
+
 
 class DbfBase(models.Model):
     '''Base class for models from .DBF data'''

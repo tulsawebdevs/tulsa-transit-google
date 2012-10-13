@@ -39,6 +39,7 @@ try:
 except ImportError:
     pass
 else:
+    assert django_extensions
     LOCAL_INSTALLED_APPS.append('django_extensions')
 
 # To use nose to run tests, install django_nose and enable below

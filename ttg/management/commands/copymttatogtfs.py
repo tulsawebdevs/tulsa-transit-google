@@ -1,5 +1,3 @@
-from datetime import datetime
-from optparse import make_option
 import logging
 
 from django.core.management.base import BaseCommand, CommandError
@@ -16,7 +14,7 @@ class Command(BaseCommand):
             raise CommandError('You must pass in the ID of the MTTA signup.')
         if len(args) > 1:
             raise CommandError('You can only copy one signup at a time.')
-        signup_id  = args[0]
+        signup_id = args[0]
         try:
             signup = SignUp.objects.get(id=signup_id)
         except SignUp.DoesNotExist:

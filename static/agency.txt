@@ -1,2 +1,0 @@
-agency_name,agency_url,agency_timezone,agency_phone,agency_lang
-Tulsa Transit,http://www.tulsatransit.org,America/Chicago,(918) 582-2100,en
