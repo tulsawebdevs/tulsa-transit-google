@@ -18,3 +18,4 @@ dj-database-url==0.2.1
 
 # Work in progress
 git+git://github.com/tulsawebdevs/django-multi-gtfs.git#egg=multigtfs
+gunicorn
