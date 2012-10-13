@@ -121,9 +121,12 @@ class SignUp(models.Model):
                     data_folders.add((data_name, folder))
 
             if ext == 'txt':
-                with the_zip.open(path, 'r') as candidate:
+                candidate = the_zip.open(path, 'r')
+                try:
                     first_bits = candidate.read(
                         len(self._stop_trips_start))
+                finally:
+                    candidate.close()
                 if (first_bits == self._stop_trips_start):
                     stop_trips.append(readz(path))
         for data_name, data_folder in data_folders:
