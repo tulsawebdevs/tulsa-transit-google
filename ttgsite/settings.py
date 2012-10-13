@@ -187,3 +187,13 @@ if 'test' in sys.argv:
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': 'mydatabase'
     }
+# Override from ENV for Heroku
+try:
+    import dj_database_url
+except ImportError:
+    dj_database_url = None
+if dj_database_url:
+    config = dj_database_url.config()
+    if config:
+        DATABASES['default'] = config
+
