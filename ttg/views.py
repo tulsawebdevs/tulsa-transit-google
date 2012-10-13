@@ -3,7 +3,10 @@ from django.core.cache import cache
 from django.http import HttpResponse
 from django.shortcuts import render_to_response
 from django.template import RequestContext
-import transitfeed
+try:
+    import transitfeed
+except ImportError:
+    transitfeed = None
 
 from forms import UploadFileForm
 from models import MediaFile
@@ -24,6 +27,8 @@ def feed_zip(request, version):
 
 def viewer(request, version):
     '''View for the schedule viewer'''
+    if not transitfeed:
+        return HttpResponse("Schedule viewing not supported")
     current_feed = MediaFile.objects.filter(file_type='F').latest('added_at')
     schedule_key = 'schedule.%d' % current_feed.id
     schedule = cache.get(schedule_key)
