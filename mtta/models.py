@@ -1394,7 +1394,7 @@ class TripTime(models.Model):
         gtfs_stop = self.tripstop.stop.copy_to_feed(feed)
         gtfs_stoptime, created = gtfs_trip.stoptime_set.get_or_create(
             stop=gtfs_stop, stop_sequence=self.tripstop.seq, defaults=dict(
-                arrival_time=time, departure_time=departure_time))
+                arrival_time=time or departure_time, departure_time=departure_time))
         if force_time and not created:
             gtfs_stoptime.arrival_time = time
             gtfs_stoptime.departure_time = departure_time
