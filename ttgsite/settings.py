@@ -137,6 +137,7 @@ INSTALLED_APPS = [
     'mtta',
 ]
 
+LOGIN_URL = reverse_lazy('login')
 LOGIN_REDIRECT_URL = reverse_lazy('home')
 
 try:
