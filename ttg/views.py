@@ -1,4 +1,5 @@
 from django.contrib import messages
+from django.contrib.auth.decorators import login_required
 from django.core.cache import cache
 from django.core.servers.basehttp import FileWrapper
 from django.http import HttpResponse
@@ -34,6 +35,7 @@ def set_version(request, version, mediafile_id):
     return redirect('file_list')
 
 
+@login_required
 def file_list(request):
     '''View for files, including upload form'''
     if request.method == 'POST':
