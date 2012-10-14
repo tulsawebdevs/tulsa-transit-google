@@ -1,6 +1,7 @@
 from django.conf import settings
 from django.conf.urls.defaults import patterns, include, url
 from django.contrib import admin
+from django.core.urlresolvers import reverse_lazy
 
 admin.autodiscover()
 
@@ -8,7 +9,8 @@ urlpatterns = patterns(
     '',
     url(r'^$', 'ttg.views.home', name='home'),
     url(r'^login/$', 'django.contrib.auth.views.login', name='login'),
-    url(r'^logout/$', 'django.contrib.auth.views.logout', name='logout'),
+    url(r'^logout/$', 'django.contrib.auth.views.logout', name='logout',
+        kwargs={'next_page': reverse_lazy('home')}),
     url(r'^ttg/', include('ttg.urls')),
 )
 
