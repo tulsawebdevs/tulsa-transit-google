@@ -24,3 +24,15 @@ class MediaFile(TimeStampedModel):
 
     def __unicode__(self):
         return self.file.name
+
+    def is_feed(self):
+        return self.file_type == self.GTFS_FILE
+
+    def is_current(self):
+        return self.version_set.filter(name='current').exists()
+
+
+class Version(TimeStampedModel):
+    name = models.CharField(max_length=12)
+    mediafile = models.ForeignKey('MediaFile')
+

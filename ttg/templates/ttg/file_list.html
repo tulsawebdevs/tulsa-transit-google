@@ -2,13 +2,23 @@
 {% block title %}Files{% endblock %}
 {% block body %}
 <h1>Files</h1>
+<p><a href="{% url home %}">Back to Home</a></p>
 <table>
-<tr><th>File Name</th><th>Date Added</th><th>Source</th></tr>
+    <tr><th>File Name</th><th>Date Added</th><th>Source</th><th>Current?</th></tr>
 {% for f in files %}
 <tr>
     <td><a href="{{f.file.url}}">{{f.file.name}}</td>
     <td>{{f.created}}</td>
     <td>{{f.get_source_display}}</td>
+    <td>
+        {% if f.is_feed %}
+            {% if f.is_current %}
+            <b>Current</b>
+            {% else %}
+            <form action="{% url set_current f.id %}" method="POST">{% csrf_token %}<button type="submit">Set as current</button></form>
+            {% endif %}
+        {% endif %}
+    </td>
 </tr>
 {% empty %}
 <tr><td span=3><em>None</em></td></tr>
