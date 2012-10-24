@@ -741,8 +741,8 @@ class Stop(DbfBase):
     def copy_to_feed(self, feed):
         gtfs_stop, created = feed.stop_set.get_or_create(
             stop_id=self.stop_id, defaults=dict(
-                name=self.stop_name, lat=self.lat, lon=self.lon,
-                desc=self.site_name, location_type=0))
+                code=self.stop_id, name=self.stop_name, lat=self.lat,
+                lon=self.lon, desc=self.site_name, location_type=0))
         return gtfs_stop
 
 
