@@ -219,6 +219,12 @@ class AgencyInfo(models.Model):
     phone = models.CharField(max_length=20)
     fare_url = models.URLField()
 
+    def __unicode__(self):
+        return self.name
+
+    class Meta:
+        verbose_name_plural = 'agency info'
+
     def copy_to_feed(self, feed):
         feed.agency_set.get_or_create(
             name=self.name, url=self.url, timezone=self.timezone,
@@ -232,9 +238,35 @@ class FeedInfo(models.Model):
     lang = models.CharField(max_length=2)
     version = models.CharField(max_length=20, null=True, blank=True)
 
+    def __unicode__(self):
+        return self.name
+
+    class Meta:
+        verbose_name_plural = 'feed info'
+
     def copy_to_feed(self, feed):
         feed.feedinfo_set.get_or_create(
             publisher_name=self.name, publisher_url=self.url, lang=self.lang)
+
+
+class Fare(models.Model):
+    name = models.CharField(max_length=20)
+    cost = models.DecimalField(
+        max_digits=5, decimal_places=2,
+        help_text='Cost for ride in dollars')
+    line_name_ipattern = models.CharField(
+        max_length=20, blank=True,
+        help_text='Case-insenstive string to look for in line name')
+
+    def __unicode__(self):
+        return self.name
+
+    def copy_to_feed(self, feed):
+        gtfs_fare, created = feed.fare_set.get_or_create(
+            fare_id=self.name, defaults=dict(
+                price=self.cost, currency_type='USD',
+                payment_method=0, transfers=None, transfer_duration=2*60*60))
+        return gtfs_fare
 
 
 class DbfBase(models.Model):
@@ -448,6 +480,7 @@ class Line(DbfBase):
     line_name = models.CharField(max_length=30)
     line_color = models.IntegerField()
     line_type = models.CharField(max_length=2)
+    fare = models.ForeignKey(Fare, null=True, blank=True)
 
     class Meta:
         unique_together = ('signup', 'line_id')
@@ -517,6 +550,20 @@ class Line(DbfBase):
     def short_name(self):
         return self.line_abbr.replace('FLEX', 'FL').replace('SFLX', 'SF')
 
+    def pick_fare(self):
+        if self.fare:
+            return self.fare
+        for fare in Fare.objects.exclude(line_name_ipattern=''):
+            if fare.line_name_ipattern.lower() in self.line_name.lower():
+                self.fare = fare
+                self.save()
+                return self.fare
+        default_fare_query = Fare.objects.filter(line_name_ipattern='')
+        if default_fare_query.exists():
+            self.fare = default_fare_query.latest('id')
+            self.save()
+        return self.fare
+
     def copy_to_feed(self, feed):
         gtfs_route, created = feed.route_set.get_or_create(
             route_id=self.line_id, defaults=dict(
@@ -524,6 +571,9 @@ class Line(DbfBase):
                 long_name=self.line_name.replace(self.line_abbr, ''),
                 rtype=3, color=self.color_as_hex(),
                 text_color=self.text_color_as_hex()))
+        fare = self.pick_fare()
+        gtfs_fare = fare.copy_to_feed(feed)
+        gtfs_fare.farerule_set.get_or_create(route=gtfs_route)
         for linedir in self.linedirection_set.all():
             linedir.copy_to_feed(feed, gtfs_route)
 
@@ -928,6 +978,10 @@ class ServiceException(models.Model):
     date = models.DateField()
     exception_type = models.IntegerField(
         choices=((1, 'Add Service'), (2, 'Remove Service')))
+
+    def __unicode__(self):
+        return '%s on %s for %s' % (
+            self.get_exception_type_display(), self.date, self.service)
 
     def copy_to_feed(self, feed, gtfs_service):
         servicedate_set = gtfs_service.servicedate_set
@@ -1394,7 +1448,8 @@ class TripTime(models.Model):
         gtfs_stop = self.tripstop.stop.copy_to_feed(feed)
         gtfs_stoptime, created = gtfs_trip.stoptime_set.get_or_create(
             stop=gtfs_stop, stop_sequence=self.tripstop.seq, defaults=dict(
-                arrival_time=time or departure_time, departure_time=departure_time))
+                arrival_time=time or departure_time,
+                departure_time=departure_time))
         if force_time and not created:
             gtfs_stoptime.arrival_time = time
             gtfs_stoptime.departure_time = departure_time

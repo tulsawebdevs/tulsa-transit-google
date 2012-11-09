@@ -15,7 +15,5 @@ wsgiref==0.1.2
 pyshp==1.1.4
 mox==0.5.3
 dj-database-url==0.2.1
-
-# Work in progress
-git+git://github.com/tulsawebdevs/django-multi-gtfs.git#egg=multigtfs
+multigtfs==0.2.3
 gunicorn

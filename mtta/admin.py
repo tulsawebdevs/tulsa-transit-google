@@ -1,9 +1,9 @@
 from django.contrib import admin
 
 from mtta.models import (
-    SignUp, Line, LineDirection, Pattern, Stop, Node, StopByLine,
-    StopByPattern, Service, TripDay, TripStop, Trip, TripTime,
-    SignupExport, ShapeAttribute)
+    AgencyInfo, Fare, FeedInfo, Line, LineDirection, Node, Pattern, Service,
+    ServiceException, ShapeAttribute, SignUp, SignupExport, Stop, StopByLine,
+    StopByPattern, Trip, TripDay, TripStop, TripTime)
 
 
 class LineAdmin(admin.ModelAdmin):
@@ -109,18 +109,22 @@ class TripAdmin(admin.ModelAdmin):
     raw_id_fields = ('tripday', 'pattern')
 
 
+admin.site.register(AgencyInfo)
+admin.site.register(Fare)
+admin.site.register(FeedInfo)
 admin.site.register(Line, LineAdmin)
 admin.site.register(LineDirection, LineDirectionAdmin)
 admin.site.register(Node, NodeAdmin)
 admin.site.register(Pattern, PatternAdmin)
 admin.site.register(Service, ServiceAdmin)
+admin.site.register(ServiceException)
+admin.site.register(ShapeAttribute, ShapeAttributeAdmin)
 admin.site.register(SignUp, SignUpAdmin)
 admin.site.register(SignupExport, SignupExportAdmin)
-admin.site.register(ShapeAttribute, ShapeAttributeAdmin)
 admin.site.register(Stop, StopAdmin)
 admin.site.register(StopByLine, StopByLineAdmin)
 admin.site.register(StopByPattern, StopByPatternAdmin)
+admin.site.register(Trip, TripAdmin)
 admin.site.register(TripDay, TripDayAdmin)
 admin.site.register(TripStop, TripStopAdmin)
-admin.site.register(Trip, TripAdmin)
 admin.site.register(TripTime, TripTimeAdmin)

@@ -4,7 +4,7 @@ from django.test import TestCase
 import mox
 
 from mtta.models import (
-    SignUp, Stop, StopByLine,
+    Fare, SignUp, Stop, StopByLine,
     StopByPattern, Service, TripDay, TripStop, Trip, TripTime)
 import mtta.models
 
@@ -664,3 +664,35 @@ Pattern      123Ar            Arr MMS2  Lv MMS2  Adm/MemE
         self.assertEqual(lv.node, self.nodes[788])
         self.assertTrue(lv.scheduled, True)
         self.assertEqual(arr.departure, lv)
+
+class LineModelTest(TestCase):
+    def setUp(self):
+        self.signup = SignUp.objects.create(name=SignUp._unset_name)
+        self.line = dict()
+        self.line['100'] = self.signup.line_set.create(
+            line_id=2893, line_abbr=100, line_name='Admiral',
+            line_color=12910532, line_type='FX')
+        self.line['902'] = self.signup.line_set.create(
+            line_id=2924, line_abbr=902, line_name='Broken Arrow Express',
+            line_color=65280, line_type='FX')
+        self.fares = dict()
+        self.fares['adult'] = Fare.objects.create(
+            name='adult', cost='1.50')
+        self.fares['express'] = Fare.objects.create(
+            name='adult_express', cost='1.75', line_name_ipattern='express')
+
+    def test_assign_fares(self):
+        self.assertEqual(None, self.line['100'].fare)
+        self.assertEqual(self.fares['adult'], self.line['100'].pick_fare())
+        self.assertEqual(self.fares['adult'], self.line['100'].fare)
+        self.assertEqual(None, self.line['902'].fare)
+        self.assertEqual(self.fares['express'], self.line['902'].pick_fare())
+        self.assertEqual(self.fares['express'], self.line['902'].fare)
+
+    def test_assign_fares_does_not_change_selection(self):
+        self.line['100'].fare = self.fares['express']
+        self.assertEqual(self.fares['express'], self.line['100'].pick_fare())
+
+    def test_assign_fares_no_default_fare(self):
+        self.fares['adult'].delete()
+        self.assertEqual(None, self.line['100'].pick_fare())
