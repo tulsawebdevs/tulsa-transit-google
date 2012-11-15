@@ -1230,7 +1230,14 @@ class TripStop(models.Model):
                         'At seq %s, abbrs %s, node %s did not match' %
                         (seq, abbrs, sbl.node))
                     break
-            if stop_abbr:
+            if stop_abbr.isdigit():
+                if not stop or int(stop_abbr) != stop.stop_id:
+                    stops_by_line_matches = False
+                    logger.info(
+                        'At seq %s, abbrs %s, stop %s did not match' %
+                        (seq, abbrs, sbl.stop))
+                    break
+            elif stop_abbr:
                 if not stop or stop_abbr != stop.stop_abbr:
                     stops_by_line_matches = False
                     logger.info(
@@ -1322,8 +1329,12 @@ class TripStop(models.Model):
             if 'stop' not in params:
                 stop_abbr = params['stop_abbr']
                 stop = None
-                stops = signup.stop_set.filter(
-                    stop_abbr=stop_abbr, in_service=True).order_by('stop_id')
+                if stop_abbr.isdigit():
+                    stops = signup.stop_set.filter(stop_id=int(stop_abbr))
+                else:
+                    stops = signup.stop_set.filter(
+                        stop_abbr=stop_abbr, in_service=True).order_by(
+                        'stop_id')
                 if len(stops) == 1:
                     stop = stops[0]
                 elif len(stops) > 1:

@@ -271,6 +271,80 @@ Pattern    DAS1             6BUE      11PE   11Uti               WHM
         self.assertEqual(tt2.tripstop, ts2)
         self.assertEqual(tt2.time, '8:00')
 
+    def test_import_100_stop_ids(self):
+        '''
+        Import a schedule where stops are listed by ID
+
+        The Nov 2012 signup used this format
+        '''
+        self.setup_100()
+        schedule = """\
+Stop Trips
+~~~~~~~~~~
+
+SignUp:       TEST SEP 2012
+Service:      1
+Line:         100
+Exception:    Off
+Printed:      09-09-2012 17:08
+
+Direction:    To Downtown
+
+Pattern      123Ar         Adm/MemE
+              5498   5440      5478
+~~~~~~~  ~~~~~~~~~  ~~~~~  ~~~~~~~~
+
+     01       7:00   7:30      8:00
+
+"""
+        mtta.models._mockable_open('100.txt', 'rb').AndReturn(
+            StringIO.StringIO(schedule))
+        self.mox.ReplayAll()
+        TripDay.import_schedule(self.signup, '100.txt')
+        self.mox.VerifyAll()
+        self.assert_expected_trip_object_counts_100()
+        service = Service.objects.get(signup=self.signup)
+        self.assertEqual(service.service_id, 1)
+        tripday = TripDay.objects.get()
+        self.assertEqual(tripday.linedir, self.linedirs['100-0'])
+        self.assertEqual(tripday.service, service)
+        ts0, ts1, ts2 = TripStop.objects.all()
+        # 123Ar/Arch124a - Timing node
+        self.assertEqual(ts0.seq, 0)
+        self.assertEqual(ts0.tripday, tripday)
+        self.assertEqual(ts0.stop_abbr, '5498')
+        self.assertEqual(ts0.stop, self.stops[5498])
+        self.assertEqual(ts0.node_abbr, '123Ar')
+        self.assertEqual(ts0.node, self.nodes[635])
+        # Adm106p - Stop
+        self.assertEqual(ts1.seq, 1)
+        self.assertEqual(ts1.tripday, tripday)
+        self.assertEqual(ts1.stop_abbr, '5440')
+        self.assertEqual(ts1.stop, self.stops[5440])
+        self.assertEqual(ts1.node_abbr, '')
+        self.assertEqual(ts1.node, None)
+        # Adm/MemE / AdmMem - Timing Node
+        self.assertEqual(ts2.tripday, tripday)
+        self.assertEqual(ts2.seq, 2)
+        self.assertEqual(ts2.stop_abbr, '5478')
+        self.assertEqual(ts2.stop, self.stops[5478])
+        self.assertEqual(ts2.node_abbr, 'Adm/MemE')
+        self.assertEqual(ts2.node, self.nodes[736])
+        trip = Trip.objects.get()
+        self.assertEqual(trip.seq, 0)
+        self.assertEqual(trip.tripday, tripday)
+        self.assertEqual(trip.pattern, self.patterns['100-01'])
+        tt0, tt1, tt2 = TripTime.objects.all()
+        self.assertEqual(tt0.trip, trip)
+        self.assertEqual(tt0.tripstop, ts0)
+        self.assertEqual(tt0.time, '7:00')
+        self.assertEqual(tt1.trip, trip)
+        self.assertEqual(tt1.tripstop, ts1)
+        self.assertEqual(tt1.time, '7:30')
+        self.assertEqual(tt2.trip, trip)
+        self.assertEqual(tt2.tripstop, ts2)
+        self.assertEqual(tt2.time, '8:00')
+
     def test_import_schedule_100_node_on_stop(self):
         '''The import succeeds if the node abbr is on the stop instead'''
         self.setup_100()
@@ -537,6 +611,118 @@ Pattern    DAS1             6BUE      11PE   11Uti               WHM
         self.assertEqual(tt6.trip, trip)
         self.assertEqual(tt6.tripstop, ts6)
         self.assertEqual(tt6.time, '20:43')
+
+    def test_880F_non_timing_nodes_with_stop_ids(self):
+        '''
+        If the stops use stop IDs, everything gets easier
+
+        The Nov 2012 signup used stop IDs'''
+        self.setup_880F()
+        schedule = '''\
+Stop Trips
+~~~~~~~~~~
+
+SignUp:       AUG 2012
+Service:      1
+Line:         880
+Exception:    Off
+Printed:      08-21-2012 15:18
+
+Direction:    From Downtown
+
+Pattern    DAS1             6BUE      11PE   11Uti               WHM
+           6639    3732     6392      5109    4156       5856    133
+~~~~~~~  ~~~~~~  ~~~~~~  ~~~~~~~  ~~~~~~~~  ~~~~~~  ~~~~~~~~~  ~~~~~
+
+     01   20:00   20:01    20:01     20:06   20:08      20:08  20:43
+'''
+
+        mtta.models._mockable_open('880F.txt', 'rb').AndReturn(
+            StringIO.StringIO(schedule))
+        self.mox.ReplayAll()
+        TripDay.import_schedule(self.signup, '880F.txt')
+        self.mox.VerifyAll()
+        service = self.signup.service_set.get()
+        tripday = TripDay.objects.get()
+        self.assertEqual(tripday.linedir, self.linedirs['880F-0'])
+        self.assertEqual(tripday.service, service)
+        ts0, ts1, ts2, ts3, ts4, ts5, ts6 = TripStop.objects.all()
+        # DAS1 / DBAY1 - Timing node
+        self.assertEqual(ts0.seq, 0)
+        self.assertEqual(ts0.tripday, tripday)
+        self.assertEqual(ts0.stop_abbr, '6639')
+        self.assertEqual(ts0.stop, self.stops[6639])
+        self.assertEqual(ts0.node_abbr, 'DAS1')
+        self.assertEqual(ts0.node, self.nodes[738])
+        # Ch5SB - Non-timing stop
+        self.assertEqual(ts1.seq, 1)
+        self.assertEqual(ts1.tripday, tripday)
+        self.assertEqual(ts1.stop_abbr, '3732')
+        self.assertEqual(ts1.stop, self.stops[3732])
+        self.assertEqual(ts1.node_abbr, '')
+        self.assertEqual(ts1.node, None)
+        # 6BUE/6stBld - Non-timing node
+        self.assertEqual(ts2.tripday, tripday)
+        self.assertEqual(ts2.seq, 2)
+        self.assertEqual(ts2.stop_abbr, '6392')
+        self.assertEqual(ts2.stop, self.stops[6392])
+        self.assertEqual(ts2.node_abbr, '6BUE')
+        self.assertEqual(ts2.node, self.nodes[856])
+        # 11PE/11stPeo - Non-timing node
+        self.assertEqual(ts3.tripday, tripday)
+        self.assertEqual(ts3.seq, 3)
+        self.assertEqual(ts3.stop_abbr, '5109')
+        self.assertEqual(ts3.stop, self.stops[5109])
+        self.assertEqual(ts3.node_abbr, '11PE')
+        self.assertEqual(ts3.node, self.nodes[38])
+        # 11Uti/11Uti - Timing node
+        self.assertEqual(ts4.tripday, tripday)
+        self.assertEqual(ts4.seq, 4)
+        self.assertEqual(ts4.stop_abbr, '4156')
+        self.assertEqual(ts4.stop, self.stops[4156])
+        self.assertEqual(ts4.node_abbr, '11Uti')
+        self.assertEqual(ts4.node, self.nodes[705])
+        # Utic12st - Non-timing stop with 2 matches
+        self.assertEqual(ts5.tripday, tripday)
+        self.assertEqual(ts5.seq, 5)
+        self.assertEqual(ts5.stop_abbr, '5856')
+        self.assertEqual(ts5.stop, self.stops[5856])
+        self.assertEqual(ts5.node_abbr, '')
+        self.assertEqual(ts5.node, None)
+        # WHM/WHM - Timing node
+        self.assertEqual(ts6.tripday, tripday)
+        self.assertEqual(ts6.seq, 6)
+        self.assertEqual(ts6.stop_abbr, '133')
+        self.assertEqual(ts6.stop, self.stops[133])
+        self.assertEqual(ts6.node_abbr, 'WHM')
+        self.assertEqual(ts6.node, self.nodes[515])
+        trip = Trip.objects.get()
+        self.assertEqual(trip.seq, 0)
+        self.assertEqual(trip.tripday, tripday)
+        self.assertEqual(trip.pattern, self.patterns['880F-01'])
+        tt0, tt1, tt2, tt3, tt4, tt5, tt6 = TripTime.objects.all()
+        self.assertEqual(tt0.trip, trip)
+        self.assertEqual(tt0.tripstop, ts0)
+        self.assertEqual(tt0.time, '20:00')
+        self.assertEqual(tt1.trip, trip)
+        self.assertEqual(tt1.tripstop, ts1)
+        self.assertEqual(tt1.time, '20:01')
+        self.assertEqual(tt2.trip, trip)
+        self.assertEqual(tt2.tripstop, ts2)
+        self.assertEqual(tt2.time, '20:01')
+        self.assertEqual(tt3.trip, trip)
+        self.assertEqual(tt3.tripstop, ts3)
+        self.assertEqual(tt3.time, '20:06')
+        self.assertEqual(tt4.trip, trip)
+        self.assertEqual(tt4.tripstop, ts4)
+        self.assertEqual(tt4.time, '20:08')
+        self.assertEqual(tt5.trip, trip)
+        self.assertEqual(tt5.tripstop, ts5)
+        self.assertEqual(tt5.time, '20:08')
+        self.assertEqual(tt6.trip, trip)
+        self.assertEqual(tt6.tripstop, ts6)
+        self.assertEqual(tt6.time, '20:43')
+
 
     def test_880F_bad_node(self):
         '''For some flex lines, the stop matches but the node doesn't
