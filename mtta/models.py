@@ -1274,7 +1274,9 @@ class TripStop(models.Model):
                     elif stop and node_abbr.lower() == stop.node_abbr.lower():
                         params.update(dict(
                             stop=stop, node=None, scheduled=True))
-                    elif stop and stop_abbr == stop.stop_abbr:
+                    elif (stop and (stop_abbr == stop.stop_abbr) or
+                          (stop_abbr.isdigit() and
+                              int(stop_abbr) == stop.stop_id)):
                         params.update(dict(stop=stop, scheduled=True))
                         if stop.nodes.count() == 1:
                             node = stop.nodes.get()

@@ -778,6 +778,60 @@ Pattern    DAS1             6BUE      11PE     StFr               WHM
         self.assertEqual(ts4.node, self.nodes[1037])
         self.assertTrue(ts4.scheduled, True)
 
+    def test_880F_bad_node_by_stop_id(self):
+        '''For some flex lines, the stop matches but the node doesn't
+
+        In Aug 2012 signup, the schedule node is StFr/StFrSB, but the timing
+        point (node 1037, stop 1286) is  STFRSB/StFrSB. Stop 1286's node_abbr
+        is 'STFRSB' as well.  So, we just match by the stop abbreviation.
+        '''
+
+        self.setup_880F()
+        # Setup the new node
+        self.stops[1286] = self.signup.stop_set.create(
+            stop_id=1286, in_service=True, lat='36.071389', lon='-95.920445',
+            node_abbr='STFRSB', stop_abbr='StFrSB',
+            stop_name='Saint Francis Hosp S-SW')
+        self.nodes[1037] = self.signup.node_set.create(
+            node_id=1037, node_abbr='STFRSB',
+            node_name='ST FRANCIS SOUTHBOUND')
+        self.nodes[1037].stops.add(self.stops[1286])
+        # Replace the 11Uti/11Uti timing node
+        self.linedirs['880F-0'].stopbyline_set.filter(seq=2).update(
+            stop=self.stops[1286], node=self.nodes[1037])
+        self.patterns['880F-01'].stopbypattern_set.filter(seq=2).update(
+            stop=self.stops[1286], node=self.nodes[1037])
+        schedule = '''\
+Stop Trips
+~~~~~~~~~~
+
+SignUp:       AUG 2012
+Service:      1
+Line:         880
+Exception:    Off
+Printed:      08-21-2012 15:18
+
+Direction:    From Downtown
+
+Pattern    DAS1             6BUE      11PE    StFr               WHM
+           6639    3732     6392      5109    1286       5856    133
+~~~~~~~  ~~~~~~  ~~~~~~  ~~~~~~~  ~~~~~~~~  ~~~~~~  ~~~~~~~~~  ~~~~~
+
+     01   20:00   20:01    20:01     20:06   20:08      20:08  20:43
+'''
+
+        mtta.models._mockable_open('880F.txt', 'rb').AndReturn(
+            StringIO.StringIO(schedule))
+        self.mox.ReplayAll()
+        TripDay.import_schedule(self.signup, '880F.txt')
+        self.mox.VerifyAll()
+        ts4 = TripStop.objects.get(seq=4)
+        self.assertEqual(ts4.stop_abbr, '1286')
+        self.assertEqual(ts4.stop, self.stops[1286])
+        self.assertEqual(ts4.node_abbr, 'StFr')
+        self.assertEqual(ts4.node, self.nodes[1037])
+        self.assertTrue(ts4.scheduled, True)
+
     def test_100_node_with_arrival_and_departure(self):
         '''If a node had arrival and departure, add to import
 
