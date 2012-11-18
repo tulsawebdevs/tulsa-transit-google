@@ -88,7 +88,8 @@ class TransferAdmin(admin.ModelAdmin):
         'from_stop__stop_id', 'from_stop__stop_abbr',
         'to_stop__stop_id', 'to_stop__stop_id')
     list_filter = ('from_stop__signup',)
-    list_display = ('from_stop', 'to_stop', 'transfer_type', 'min_transfer_time')
+    list_display = (
+        'from_stop', 'to_stop', 'transfer_type', 'min_transfer_time')
     list_display_links = ('transfer_type',)
 
 
