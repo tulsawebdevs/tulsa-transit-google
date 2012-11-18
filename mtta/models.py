@@ -1121,6 +1121,7 @@ class TripDay(models.Model):
                     raw_pat = linein[pattern_bounds[0]:pattern_bounds[1]]
                     pattern_name = raw_pat.strip()
                     pattern = linedir.pattern_set.get(name=pattern_name)
+                    pattern.get_points()
                     trip = Trip.objects.create(
                         tripday=tripday, pattern=pattern, seq=trip_seq)
                     trip_seq += 1
