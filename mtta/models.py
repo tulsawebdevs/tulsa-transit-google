@@ -377,12 +377,23 @@ class DbfBase(models.Model):
         # Check used fields:
         for name, count in used_names.items():
             if count != 1:
-                msg = '%s appears %d times in DBF fields,' % (name, count)
-                msg += ' only first will be used:'
+                dup_fields = []
+                no_problem = True
                 for field in fields:
                     if field['name'] == name or field.get('long_name') == name:
+                        if dup_fields and len(field['top_values']) > 1:
+                            no_problem = False
+                        dup_fields.append(field)
+                msg = ('%s appears %d times in DBF fields' % (name, count))
+                if no_problem:
+                    msg += ', but only the first has data.'
+                    logger.info(msg)
+                else:
+                    msg += (
+                        ', and several have data! (only first will be used):')
+                    for field in dup_fields:
                         msg += '\n  ' + str(field)
-                logger.warning(msg)
+                    logger.warning(msg)
 
         # Store the field definitions in the database
         ShapeAttribute.objects.create(
