@@ -1,4 +1,3 @@
-from zipfile import is_zipfile
 import StringIO
 
 from celery.decorators import task

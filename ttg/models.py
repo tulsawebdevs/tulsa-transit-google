@@ -35,4 +35,3 @@ class MediaFile(TimeStampedModel):
 class Version(TimeStampedModel):
     name = models.CharField(max_length=12)
     mediafile = models.ForeignKey('MediaFile')
-

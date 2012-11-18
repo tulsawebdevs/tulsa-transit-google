@@ -724,7 +724,6 @@ Pattern    DAS1             6BUE      11PE   11Uti               WHM
         self.assertEqual(tt6.tripstop, ts6)
         self.assertEqual(tt6.time, '20:43')
 
-
     def test_880F_bad_node(self):
         '''For some flex lines, the stop matches but the node doesn't
 
@@ -905,6 +904,7 @@ Pattern      123Ar            Arr MMS2  Lv MMS2  Adm/MemE
         self.assertEqual(lv.node, self.nodes[788])
         self.assertTrue(lv.scheduled, True)
         self.assertEqual(arr.departure, lv)
+
 
 class LineModelTest(TestCase):
     def setUp(self):

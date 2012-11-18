@@ -278,7 +278,8 @@ class Fare(models.Model):
         gtfs_fare, created = feed.fare_set.get_or_create(
             fare_id=self.name, defaults=dict(
                 price=self.cost, currency_type='USD',
-                payment_method=0, transfers=None, transfer_duration=2*60*60))
+                payment_method=0, transfers=None,
+                transfer_duration=2 * 60 * 60))
         return gtfs_fare
 
 
@@ -1348,8 +1349,8 @@ class TripStop(models.Model):
                     stops = signup.stop_set.filter(stop_id=int(stop_abbr))
                 else:
                     stops = signup.stop_set.filter(
-                        stop_abbr=stop_abbr, in_service=True).order_by(
-                        'stop_id')
+                        stop_abbr=stop_abbr,
+                        in_service=True).order_by('stop_id')
                 if len(stops) == 1:
                     stop = stops[0]
                 elif len(stops) > 1:
@@ -1481,6 +1482,7 @@ class TripTime(models.Model):
             gtfs_stoptime.departure_time = departure_time
             gtfs_stoptime.save()
         return gtfs_stoptime
+
 
 class Transfer(models.Model):
     signup = models.ForeignKey(SignUp)

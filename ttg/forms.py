@@ -9,7 +9,6 @@ if sys.version_info >= (2, 7, 0):
 else:
     from zipfile import _EndRecData
 
-    
     def _check_zipfile(fp):
         try:
             if _EndRecData(fp):
@@ -18,8 +17,7 @@ else:
             pass
         return False
 
-
-    def is_zipfile(filename):
+    def is_zipfile(filename):  # NOQA
         """Quickly see if a file is a ZIP file by checking the magic number.
 
         The filename argument may be a file or file-like object too.

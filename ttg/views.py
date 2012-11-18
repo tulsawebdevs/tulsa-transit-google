@@ -1,6 +1,5 @@
 from django.contrib import messages
 from django.contrib.auth.decorators import login_required
-from django.core.cache import cache
 from django.core.servers.basehttp import FileWrapper
 from django.http import HttpResponse
 from django.shortcuts import redirect, render_to_response, get_object_or_404
@@ -20,7 +19,8 @@ def home(request):
 
 def feed_zip(request, version):
     '''View for an output GTFS zip file'''
-    feed = get_object_or_404(MediaFile, file_type=MediaFile.GTFS_FILE, version__name=version)
+    feed = get_object_or_404(
+        MediaFile, file_type=MediaFile.GTFS_FILE, version__name=version)
     wrapper = FileWrapper(feed.file)
     response = HttpResponse(wrapper, content_type='text/plain')
     response['Content-Length'] = feed.file.size
@@ -30,7 +30,8 @@ def feed_zip(request, version):
 def set_version(request, version, mediafile_id):
     assert request.method == 'POST'
     mediafile = get_object_or_404(MediaFile, id=mediafile_id)
-    Version.objects.filter(mediafile__file_type=mediafile.file_type, name=version).delete()
+    Version.objects.filter(
+        mediafile__file_type=mediafile.file_type, name=version).delete()
     Version.objects.get_or_create(name=version, mediafile=mediafile)
     return redirect('file_list')
 
