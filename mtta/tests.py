@@ -1,11 +1,12 @@
 import StringIO
 
 from django.test import TestCase
+from multigtfs.models import Feed
 import mox
 
 from mtta.models import (
     Fare, SignUp, Stop, StopByLine,
-    StopByPattern, Service, TripDay, TripStop, Trip, TripTime)
+    StopByPattern, Service, Transfer, TripDay, TripStop, Trip, TripTime)
 import mtta.models
 
 
@@ -936,3 +937,73 @@ class LineModelTest(TestCase):
     def test_assign_fares_no_default_fare(self):
         self.fares['adult'].delete()
         self.assertEqual(None, self.line['100'].pick_fare())
+
+
+class TransferTest(TestCase):
+    def setUp(self):
+        self.signup = SignUp.objects.create(name=SignUp._unset_name)
+        self.stops = dict()
+        self.stops[6650] = self.signup.stop_set.create(
+            stop_id=6650, stop_abbr='MBAY2', stop_name='MMS Bay2',
+            node_abbr='LV MMS2', site_name='Midtown Memorial Station',
+            lat='36.113915', lon='-95.888784', in_service=True)
+        self.stops[5440] = self.signup.stop_set.create(
+            stop_id=5440, stop_abbr='Adm106p',
+            lat='36.160832', lon='-95.858432',
+            stop_name='E Admiral Pl&N 106th E Pl/S 106Th E', in_service=True)
+
+    def import_test_nov2012(self):
+        transfers_txt = StringIO.StringIO('''\
+from_stop_id,to_stop_id,transfer_type,min_transfer_time
+6650,5440,0,
+''')
+        self.assertFalse(Transfer.objects.exists())
+        Transfer.import_transfers(self.signup, transfers_txt)
+        transfer = Transfer.objects.get()
+        self.assertEqual(transfer.from_stop, self.stops[6650])
+        self.assertEqual(transfer.to_stop, self.stops[5440])
+        self.assertEqual(transfer.transfer_type, 0)
+        self.assertEqual(transfer.min_transfer_time, None)
+
+    def import_test_minimal(self):
+        transfers_txt = StringIO.StringIO('''\
+from_stop_id,to_stop_id,transfer_type,min_transfer_time
+6650,5440,,
+''')
+        self.assertFalse(Transfer.objects.exists())
+        Transfer.import_transfers(self.signup, transfers_txt)
+        transfer = Transfer.objects.get()
+        self.assertEqual(transfer.from_stop, self.stops[6650])
+        self.assertEqual(transfer.to_stop, self.stops[5440])
+        self.assertEqual(transfer.transfer_type, 0)
+        self.assertEqual(transfer.min_transfer_time, None)
+
+    def import_test_maximal(self):
+        transfers_txt = StringIO.StringIO('''\
+from_stop_id,to_stop_id,transfer_type,min_transfer_time
+6650,5440,0,1200
+''')
+        self.assertFalse(Transfer.objects.exists())
+        Transfer.import_transfers(self.signup, transfers_txt)
+        transfer = Transfer.objects.get()
+        self.assertEqual(transfer.from_stop, self.stops[6650])
+        self.assertEqual(transfer.to_stop, self.stops[5440])
+        self.assertEqual(transfer.transfer_type, 0)
+        self.assertEqual(transfer.min_transfer_time, 1200)
+
+    def test_unicode(self):
+        transfer = self.signup.transfer_set.create(
+            from_stop=self.stops[6650], to_stop=self.stops[5440])
+        self.assertEqual(str(transfer), '6650-MBAY2 to 5440')
+
+    def test_copy_to_feed(self):
+        transfer = self.signup.transfer_set.create(
+            from_stop=self.stops[6650], to_stop=self.stops[5440])
+        feed = Feed.objects.create()
+        gtfs_stop_6650 = self.stops[6650].copy_to_feed(feed)
+        gtfs_stop_5440 = self.stops[5440].copy_to_feed(feed)
+        gtfs_transfer = transfer.copy_to_feed(feed)
+        self.assertEqual(gtfs_transfer.from_stop, gtfs_stop_6650)
+        self.assertEqual(gtfs_transfer.to_stop, gtfs_stop_5440)
+        self.assertEqual(gtfs_transfer.transfer_type, 0)
+        self.assertEqual(gtfs_transfer.min_transfer_time, None)

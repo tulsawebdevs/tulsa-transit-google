@@ -1,4 +1,5 @@
 from collections import defaultdict
+import csv
 import logging
 import re
 import os
@@ -59,11 +60,13 @@ class SignUp(models.Model):
     )
     _names_file = 'NewFieldNames.txt'
     _stop_trips_start = 'Stop Trips'
+    _transfers_file = 'transfers.txt'
 
     def import_folder(self, folder):
         '''Import data from an MTTA signup that's been extracted to disk'''
         data_files = defaultdict(dict)
         stop_trips = []
+        transfers = None
         for path, dirs, files in os.walk(folder):
             data_name = None
             for f in files:
@@ -75,7 +78,8 @@ class SignUp(models.Model):
                     if name in nameset:
                         data_name = nameset[0]
                         data_files[data_name][ext] = full_path
-
+                if full_name == self._transfers_file:
+                    transfers = full_path
                 if ext == 'txt':
                     with open(full_path, 'r') as candidate:
                         first_bits = candidate.read(
@@ -93,7 +97,7 @@ class SignUp(models.Model):
                 raise Exception('No %s found in path %s' % (key, folder))
         if not stop_trips:
             raise Exception('No schedules found in path %s' % folder)
-        self._import(data_files, stop_trips)
+        self._import(data_files, stop_trips, transfers)
 
     def import_zip(self, zippath_or_file):
         '''Import data from a unextracted MTTA signup file'''
@@ -102,6 +106,7 @@ class SignUp(models.Model):
         data_files = defaultdict(dict)
         data_folders = set()
         stop_trips = []
+        transfers = None
 
         def readz(path):
             '''Get a seekable file from the_zip'''
@@ -119,8 +124,9 @@ class SignUp(models.Model):
                     data_name = nameset[0]
                     data_files[data_name][ext] = readz(path)
                     data_folders.add((data_name, folder))
-
-            if ext == 'txt':
+            if full_name == self._transfers_file:
+                transfers = readz(path)
+            elif ext == 'txt':
                 candidate = the_zip.open(path, 'r')
                 try:
                     first_bits = candidate.read(
@@ -140,9 +146,9 @@ class SignUp(models.Model):
                 raise Exception('No %s found in zip file %s' % (key, the_zip))
         if not stop_trips:
             raise Exception('No schedules found in zip file %s' % the_zip)
-        self._import(data_files, stop_trips)
+        self._import(data_files, stop_trips, transfers)
 
-    def _import(self, data_files, stop_trips):
+    def _import(self, data_files, stop_trips, transfers=None):
         '''Import a set of ESRI Shapfiles and Stop Trip schedules'''
 
         # Get the important parts, so we'll raise a KeyError early
@@ -171,6 +177,8 @@ class SignUp(models.Model):
             self, stopsbypattern_dbf, stopsbypattern_names)
         for schedule in stop_trips:
             TripDay.import_schedule(self, schedule)
+        if transfers:
+            Transfer.import_transfers(self, transfers)
 
     def copy_to_feed(self):
         feed = Feed.objects.create(name=self.name)
@@ -183,6 +191,11 @@ class SignUp(models.Model):
         for line in self.line_set.all():
             logger.info('Exporting data for line %s...' % line)
             line.copy_to_feed(feed)
+        if self.transfer_set.exists():
+            logger.info(
+                'Exporting %d transfers...' % self.transfer_set.count())
+            for transfer in self.transfer_set.all():
+                transfer.copy_to_feed(feed)
         signup_export.finished = timezone.now()
         signup_export.save()
         return feed
@@ -1468,3 +1481,56 @@ class TripTime(models.Model):
             gtfs_stoptime.departure_time = departure_time
             gtfs_stoptime.save()
         return gtfs_stoptime
+
+class Transfer(models.Model):
+    signup = models.ForeignKey(SignUp)
+    from_stop = models.ForeignKey(
+        Stop, related_name='transfer_from_set',
+        help_text='Stop where a connection between routes begins.')
+    to_stop = models.ForeignKey(
+        Stop, related_name='transfer_to_set',
+        help_text='Stop where a connection between routes ends.')
+    transfer_type = models.IntegerField(
+        default=0, blank=True,
+        choices=((0, 'Recommended transfer point'),
+                 (1, 'Timed transfer point (vehicle will wait)'),
+                 (2, 'min_transfer_time needed to successfully transfer'),
+                 (3, 'No transfers possible')),
+        help_text="What kind of transfer?")
+    min_transfer_time = models.IntegerField(
+        null=True, blank=True,
+        help_text="How many seconds are required to transfer?")
+
+    @classmethod
+    def import_transfers(cls, signup, path_or_file):
+        transfers = _force_to_file(path_or_file)
+        logger.info('Parsing Transfers from %s...' % transfers.name)
+        reader = csv.reader(transfers)
+        first_row_checked = False
+        for row in reader:
+            if first_row_checked:
+                params = dict()
+                params['from_stop'] = signup.stop_set.get(stop_id=row[0])
+                params['to_stop'] = signup.stop_set.get(stop_id=row[1])
+                if row[2]:
+                    params['transfer_type'] = int(row[2])
+                if row[3]:
+                    params['min_transfer_time'] = int(row[3])
+                signup.transfer_set.create(**params)
+            else:
+                expected = [
+                    'from_stop_id', 'to_stop_id', 'transfer_type',
+                    'min_transfer_time']
+                assert row == expected, 'Bad transfers.txt: %s' % row
+                first_row_checked = True
+
+    def copy_to_feed(self, feed):
+        from_stop = feed.stop_set.get(stop_id=self.from_stop.stop_id)
+        to_stop = feed.stop_set.get(stop_id=self.to_stop.stop_id)
+        gtfs_transfer, created = from_stop.transfer_from_stop.get_or_create(
+            to_stop=to_stop, transfer_type=self.transfer_type,
+            min_transfer_time=self.min_transfer_time)
+        return gtfs_transfer
+
+    def __unicode__(self):
+        return u"%s to %s" % (self.from_stop, self.to_stop.stop_id)
