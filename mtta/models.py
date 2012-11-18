@@ -1312,11 +1312,21 @@ class TripStop(models.Model):
                                 (tripday, node_abbr, stop, node))
                             params['node'] = node
                         elif stop.nodes.exists():
-                            logger.warning(
-                                "On tripday %s, no node match for '%s', but"
-                                " stop '%s' matches.  It has multiple nodes"
-                                " (%s), so leaving node empty." %
-                                (tripday, node_abbr, stop, stop.nodes.all()))
+                            by_abbr = stop.nodes.filter(node_abbr=node_abbr)
+                            if by_abbr.count() == 1:
+                                params['node'] = by_abbr.get()
+                                logger.warning(
+                                    "On tripday %s, no node match for '%s',"
+                                    " but stop '%s' matches and has"
+                                    " associated node. Using node '%s'" %
+                                    (tripday, node_abbr, stop, node))
+                            else:
+                                logger.warning(
+                                    "On tripday %s, no node match for '%s',"
+                                    " but stop '%s' matches.  It has multiple"
+                                    " nodes (%s), so leaving node empty." %
+                                    (tripday, node_abbr, stop,
+                                     stop.nodes.all()))
                         else:
                             logger.warning(
                                 "On tripday %s, no node match for '%s', but"
