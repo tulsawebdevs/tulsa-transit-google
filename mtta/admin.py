@@ -3,7 +3,7 @@ from django.contrib import admin
 from mtta.models import (
     AgencyInfo, Fare, FeedInfo, Line, LineDirection, Node, Pattern, Service,
     ServiceException, ShapeAttribute, SignUp, SignupExport, Stop, StopByLine,
-    StopByPattern, Trip, TripDay, TripStop, TripTime)
+    StopByPattern, Transfer, Trip, TripDay, TripStop, TripTime)
 
 
 class LineAdmin(admin.ModelAdmin):
@@ -82,6 +82,16 @@ class StopByPatternAdmin(admin.ModelAdmin):
         return str(instance.linedir.line)
 
 
+class TransferAdmin(admin.ModelAdmin):
+    raw_id_fields = ('from_stop', 'to_stop')
+    search_fields = (
+        'from_stop__stop_id', 'from_stop__stop_abbr',
+        'to_stop__stop_id', 'to_stop__stop_id')
+    list_filter = ('from_stop__signup',)
+    list_display = ('from_stop', 'to_stop', 'transfer_type', 'min_transfer_time')
+    list_display_links = ('transfer_type',)
+
+
 class TripDayAdmin(admin.ModelAdmin):
     raw_id_fields = ('linedir', 'service')
     list_filter = ('service__signup', 'linedir__line',)
@@ -124,6 +134,7 @@ admin.site.register(SignupExport, SignupExportAdmin)
 admin.site.register(Stop, StopAdmin)
 admin.site.register(StopByLine, StopByLineAdmin)
 admin.site.register(StopByPattern, StopByPatternAdmin)
+admin.site.register(Transfer, TransferAdmin)
 admin.site.register(Trip, TripAdmin)
 admin.site.register(TripDay, TripDayAdmin)
 admin.site.register(TripStop, TripStopAdmin)
