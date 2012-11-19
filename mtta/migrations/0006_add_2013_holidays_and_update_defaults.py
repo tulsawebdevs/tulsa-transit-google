@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# NOQA
+# flake8: noqa
 import datetime
 from south.db import db
 from south.v2 import DataMigration
