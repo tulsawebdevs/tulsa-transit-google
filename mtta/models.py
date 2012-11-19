@@ -384,9 +384,9 @@ class DbfBase(models.Model):
                         if dup_fields and len(field['top_values']) > 1:
                             no_problem = False
                         dup_fields.append(field)
-                msg = ('%s appears %d times in DBF fields' % (name, count))
+                msg = (' %s appears %d times in DBF fields' % (name, count))
                 if no_problem:
-                    msg += ', but only the first has data.'
+                    msg += ", but only the first has data, so we're OK."
                     logger.info(msg)
                 else:
                     msg += (
@@ -1318,7 +1318,7 @@ class TripStop(models.Model):
                                 logger.warning(
                                     "On tripday %s, no node match for '%s',"
                                     " but stop '%s' matches and has"
-                                    " associated node. Using node '%s'" %
+                                    " an associated node. Using node '%s'" %
                                     (tripday, node_abbr, stop, node))
                             else:
                                 logger.warning(
