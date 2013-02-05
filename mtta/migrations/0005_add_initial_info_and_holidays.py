@@ -10,83 +10,100 @@ class Migration(DataMigration):
     def forwards(self, orm):
         # Previously, we used initial_data.json, but that gets reloaded
         # every time.  Here's the initial data
-        agencyinfo, created = orm['mtta.agencyinfo'].objects.get_or_create(
-            id=1, defaults={
-                "name": "Tulsa Transit",
-                "url": "http://www.tulsatransit.org",
-                "timezone": "America/Chicago",
-                "phone": "(918) 582-2100",
-                "lang": "en",
-                "fare_url": "http://tulsatransit.org/fares-passes/"})
+        AgencyInfo = orm['mtta.agencyinfo']
+        if not AgencyInfo.objects.filter(id=1).exists():
+            AgencyInfo.objects.create(
+                name="Tulsa Transit",
+                url="http://www.tulsatransit.org",
+                timezone="America/Chicago",
+                phone="(918) 582-2100",
+                lang="en",
+                fare_url="http://tulsatransit.org/fares-passes/")
 
-        feedinfo, created = orm["mtta.feedinfo"].objects.get_or_create(
-            id=1, defaults={
-                "name": "Tulsa Web Devs",
-                "url": "http://tulsawebdevs.org",
-                "lang": "en"
-            })
+        FeedInfo = orm["mtta.feedinfo"]
+        if not FeedInfo.objects.filter(id=1).exists():
+            FeedInfo.objects.create(
+                name="Tulsa Web Devs",
+                url="http://tulsawebdevs.org",
+                lang="en")
 
-        default_weekday = orm["mtta.service"].objects.get_or_create(
-            id=1, defaults={
-                "signup": None,
-                "service_id": 1,
-                "monday": True,
-                "tuesday": True,
-                "wednesday": True,
-                "thursday": True,
-                "friday": True,
-                "saturday": False,
-                "sunday": False,
-                "start_date": "2012-08-01",
-                "end_date": "2013-08-01"})
-        default_saturday = orm["mtta.service"].objects.get_or_create(
-            id=2, defaults={
-                "signup": None,
-                "service_id": 2,
-                "monday": False,
-                "tuesday": False,
-                "wednesday": False,
-                "thursday": False,
-                "friday": False,
-                "saturday": True,
-                "sunday": True,
-                "start_date": "2012-08-01",
-                "end_date": "2013-08-01"})
-        except1 = orm["mtta.serviceexception"].objects.get_or_create(
-            id=1, defaults={
-                "service": 1,
+        Service = orm["mtta.service"]
+        default_weekday_data = {
+            "signup": None,
+            "service_id": 1,
+            "monday": True,
+            "tuesday": True,
+            "wednesday": True,
+            "thursday": True,
+            "friday": True,
+            "saturday": False,
+            "sunday": False,
+            "start_date": "2012-08-01",
+            "end_date": "2013-08-01"}
+        if Service.objects.filter(id=1).exists():
+            default_weekday = Service.objects.get(id=1)
+            for attr, val in default_weekday_data.items():
+                assert getattr(default_weekday, attr) == val
+        else:
+            default_weekday = Service.objects.create(**default_weekday_data)
+        default_saturday_data = {
+            "signup": None,
+            "service_id": 2,
+            "monday": False,
+            "tuesday": False,
+            "wednesday": False,
+            "thursday": False,
+            "friday": False,
+            "saturday": True,
+            "sunday": True,
+            "start_date": "2012-08-01",
+            "end_date": "2013-08-01"}
+        if Service.objects.filter(id=2).exists():
+            default_saturday = Service.objects.get(id=2)
+            for attr, val in default_saturday_data.items():
+                assert getattr(default_saturday, attr) == val
+        else:
+            default_saturday = Service.objects.create(**default_saturday_data)
+
+        ServiceException = orm['mtta.serviceexception']
+        exceptions = [
+            {
+                "service": default_weekday,
                 "date": "2012-11-22",
-                "exception_type": 2})
-        except2 = orm["mtta.serviceexception"].objects.get_or_create(
-            id=2, defaults={
-                "service": 1,
+                "exception_type": 2
+            },{
+                "service": default_weekday,
                 "date": "2012-11-23",
-                "exception_type": 2})
-        except3 = orm["mtta.serviceexception"].objects.get_or_create(
-            id=3, defaults={
-                "service": 2,
+                "exception_type": 2
+            },{
+                "service": default_saturday,
                 "date": "2012-11-23",
-                "exception_type": 1})
-        except4 = orm["mtta.serviceexception"].objects.get_or_create(
-            id=4, defaults={
-                "service": 1,
+                "exception_type": 1
+            },{
+                "service": default_weekday,
                 "date": "2012-12-24",
-                "exception_type": 2})
-        except5 = orm["mtta.serviceexception"].objects.get_or_create(
-            id=5, defaults={
-                "service": 2,
+                "exception_type": 2
+            },{
+                "service": default_saturday,
                 "date": "2012-12-24",
-                "exception_type": 1})
-        except6 = orm["mtta.serviceexception"].objects.get_or_create(
-            id=6, defaults={
-                "service": 1,
+                "exception_type": 1
+            },{
+                "service": default_weekday,
                 "date": "2012-12-25",
-                "exception_type": 2})
-        except7 = orm["mtta.serviceexception"].objects.get_or_create(
-            id=7, defaults={
-                "service": 1,
+                "exception_type": 2
+            },{
+                "service": default_weekday,
                 "date": "2013-01-01",
-                "exception_type": 2})
+                "exception_type": 2
+            }]
+        for pos, data in enumerate(exceptions):
+            se_id = pos + 1
+            if ServiceException.objects.filter(id=se_id).exists():
+                exception = ServiceException.objects.get(id=se_id)
+                for attr, val in data.items():
+                    assert getattr(exception, attr) == val
+            else:
+                ServiceException.objects.create(**data)
 
     def backwards(self, orm):
         # Don't bother
