@@ -813,9 +813,13 @@ class Stop(DbfBase):
     convert_LAT = DbfBase.convert_latlon
     convert_LON = DbfBase.convert_latlon
 
+    @property
+    def gtfs_stop_id(self):
+        return '%04d' % self.stop_id
+
     def copy_to_feed(self, feed):
         gtfs_stop, created = feed.stop_set.get_or_create(
-            stop_id=self.stop_id, defaults=dict(
+            stop_id=self.gtfs_stop_id, defaults=dict(
                 code=self.stop_id, name=self.stop_name, lat=self.lat,
                 lon=self.lon, desc=self.site_name, location_type=0))
         return gtfs_stop
@@ -1549,8 +1553,8 @@ class Transfer(models.Model):
                 first_row_checked = True
 
     def copy_to_feed(self, feed):
-        from_stop = feed.stop_set.get(stop_id=self.from_stop.stop_id)
-        to_stop = feed.stop_set.get(stop_id=self.to_stop.stop_id)
+        from_stop = feed.stop_set.get(stop_id=self.from_stop.gtfs_stop_id)
+        to_stop = feed.stop_set.get(stop_id=self.to_stop.gtfs_stop_id)
         gtfs_transfer, created = from_stop.transfer_from_stop.get_or_create(
             to_stop=to_stop, transfer_type=self.transfer_type,
             min_transfer_time=self.min_transfer_time)
