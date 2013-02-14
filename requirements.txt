@@ -15,5 +15,5 @@ wsgiref==0.1.2
 pyshp==1.1.4
 mox==0.5.3
 dj-database-url==0.2.1
-multigtfs==0.2.4
+multigtfs==0.2.5
 gunicorn
