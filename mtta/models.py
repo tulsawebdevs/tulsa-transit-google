@@ -1228,7 +1228,13 @@ class TripStop(models.Model):
             tripstop_params = cls._parse_normal_columns(tripday, data_cols)
         else:
             assert line_type == 'FL'
-            tripstop_params = cls._parse_flex_columns(tripday, data_cols)
+            try:
+                tripstop_params = cls._parse_normal_columns(
+                    tripday, data_cols)
+            except:
+                logger.info(
+                    'Parsing as normal trip failed, trying FLEX variant...')
+                tripstop_params = cls._parse_flex_columns(tripday, data_cols)
 
         tripstops = []
         last_params = dict()
