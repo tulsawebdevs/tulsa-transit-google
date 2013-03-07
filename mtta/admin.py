@@ -23,6 +23,7 @@ class NodeAdmin(admin.ModelAdmin):
         'node_id', 'node_abbr', 'node_name', 'stops__stop_abbr',
         'stops__node_abbr')
     list_display = ('__unicode__', 'node_name', 'node_abbr')
+    list_filter = ('signup',)
 
 
 class PatternAdmin(admin.ModelAdmin):
