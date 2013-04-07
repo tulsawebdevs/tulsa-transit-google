@@ -6,12 +6,21 @@ Tulsa Web Devs runs an instance of `OpenTripPlanner`_ using this Tulsa Transit G
 feed. The following instructions explain how to update the OpenTripPlanner
 graph object file at http://tripplanner.tulsawebdevs.org
 
-Upload new feed .zip to dropbox
-===============================
+Upload new feed .zip
+====================
+The OpenTripPlanner server can download the feed.zip from an external website,
+so you just need to make it accessible.
 
-We store the MTTA GTFS feeds in groovecoder's `mtta_gtfs public dropbox folder`_
+One way is to get it on http://gtfs.tulsawebdevs.org.  You'll need a login in
+order to upload files.  You can upload an MTTA signup, and a feed will be
+generated in about 90 minutes.  Or, if you generate a feed locally, you can
+directly upload it.  If you set the feed as the current feed, it will be
+available at http://gtfs.tulsawebdevs.org/ttg/files/by_version/current/feed.zip .
+This is the preferred way to load the GTFS file, since we can re-run the
+importer without changing the config file.
+
+You can also store it in dropbox, in groovecoder's `mtta_gtfs public dropbox folder`_
 so the OpenTripPlanner server can download them to build its graph object.
-
 When you generate a new feed .zip file, upload it to the
 `mtta_gtfs public dropbox folder`_.
 
@@ -24,7 +33,7 @@ account running OpenTripPlanner. To connect to the box:
 #. grab the `otp_rsa` private key from our `tulsa_transit folder`_ on Dropbox
    (You'll need to be invited to the folder by groovecoder)
 #. Use the following ssh config::
-   
+
     Host tripplanner
         HostName 50.57.172.192
         User otp
@@ -39,10 +48,16 @@ Once you're on the box, you need to update OpenTripPlanner's builder to use the
 new feed .zip file.
 
 #. Edit `/otp/graph-builder.xml`
-#. Change the GtfsBundle url value::
-   
+#. Change the GtfsBundle url value.  For gtfs.tulsawebdevs.org::
+
+    <bean class="org.opentripplanner.graph_builder.model.GtfsBundle">
+        <property name="url" value="http://gtfs.tulsawebdevs.org/ttg/files/by_version/current/feed.zip" />
+
+or, for groovecoder's dropbox::
+
     <bean class="org.opentripplanner.graph_builder.model.GtfsBundle">
         <property name="url" value="https://dl.dropbox.com/u/219693365/mtta_gtfs/{new-file}.zip" />
+
 
 Run build-graph.sh
 ==================
