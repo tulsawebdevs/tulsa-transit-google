@@ -1,4 +1,5 @@
 {% extends 'ttg/base.html' %}
+{% load url from future %}
 {% block title %}Tulsa Transit as GTFS Feed{% endblock %}
 {% block body %}
 <h1>Tulsa Transit as GTFS</h1>
@@ -15,16 +16,16 @@ See
 the project page</a> for more information.
 </p>
 <ul>
-<li><a href="{% url feed_zip version='current' %}">The current GTFS feed</a></li>
+<li><a href="{% url 'feed_zip' version='current' %}">The current GTFS feed</a></li>
 <li><a href="http://tripplanner.tulsawebdevs.org/">View the current GTFS data on a map</a></li>
 {% if user.is_authenticated %}
-<li><a href="{% url file_list %}">View all files / Upload a new file</a></li>
+<li><a href="{% url 'file_list' %}">View all files / Upload a new file</a></li>
 {% if user.is_staff %}
 <li><a href="/admin/">View the admin</a></li>
 {% endif %}
-<li><a href="{% url logout %}">Logout</a></li>
+<li><a href="{% url 'logout' %}">Logout</a></li>
 {% else %}
-<li><a href="{% url login %}">Login</a></li>
+<li><a href="{% url 'login' %}">Login</a></li>
 {% endif %}
 </ul>
 {% endblock %}

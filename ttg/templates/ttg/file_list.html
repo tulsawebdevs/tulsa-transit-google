@@ -1,8 +1,9 @@
 {% extends 'ttg/base.html' %}
+{% load url from future %}
 {% block title %}Files{% endblock %}
 {% block body %}
 <h1>Files</h1>
-<p><a href="{% url home %}">Back to Home</a></p>
+<p><a href="{% url 'home' %}">Back to Home</a></p>
 <table>
     <tr><th>File Name</th><th>Date Added</th><th>Source</th><th>Current?</th></tr>
 {% for f in files %}
@@ -15,7 +16,7 @@
             {% if f.is_current %}
             <b>Current</b>
             {% else %}
-            <form action="{% url set_current f.id %}" method="POST">{% csrf_token %}<button type="submit">Set as current</button></form>
+            <form action="{% url 'set_current' f.id %}" method="POST">{% csrf_token %}<button type="submit">Set as current</button></form>
             {% endif %}
         {% endif %}
     </td>
