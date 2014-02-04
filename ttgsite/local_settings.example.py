@@ -12,10 +12,10 @@ ADMINS = (
     # ('your_name', 'your_email'),
 )
 
-# Use a local SQLite3 database
+# Use a local Spatialite (SQLite3 + GIS) database
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
+        'ENGINE': 'django.contrib.gis.db.backends.spatialite',
         'NAME': path('ttg.sqlite'),       # create in this folder
     }
 }
@@ -23,7 +23,7 @@ DATABASES = {
 # postgres version
 #DATABASES = {
 #    'default': {
-#        'ENGINE': 'django.db.backends.postgresql_psycopg2',
+#        'ENGINE': 'django.contrib.gis.db.backends.postgis',
 #        'NAME': 'ttg_project',
 #        'USER': 'ttg',
 #        'PASSWORD': 'ggt',
