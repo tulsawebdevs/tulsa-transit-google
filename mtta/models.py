@@ -662,9 +662,12 @@ class Pattern(models.Model):
         PATTERN_ID_FIELD = 1
         PATTERN_FIELD = 2
         LINEDIR_ID_FIELD = 3
-        assert sf.fields[PATTERN_ID_FIELD][0] == 'PatternId'
-        assert sf.fields[PATTERN_FIELD][0] == 'Pattern'
-        assert sf.fields[LINEDIR_ID_FIELD][0] == 'LineDirId'
+        assert sf.fields[PATTERN_ID_FIELD][0].upper() == 'PatternId'.upper(),\
+            sf.fields[PATTERN_ID_FIELD][0]
+        assert sf.fields[PATTERN_FIELD][0].upper() == 'Pattern'.upper(),\
+            sf.fields[PATTERN_FIELD][0]
+        assert sf.fields[LINEDIR_ID_FIELD][0].upper() == 'LineDirId'.upper(),\
+            sf.fields[LINEDIR_ID_FIELD][0]
         pattern_cnt, point_cnt = 0, 1
         for record, shape in zip(sf.records(), shapes):
             assert shape.shapeType == 3
@@ -779,7 +782,7 @@ class Stop(DbfBase):
     signup = models.ForeignKey(SignUp)
     stop_id = models.IntegerField(db_index=True)
     stop_abbr = models.CharField(max_length=8, db_index=True)
-    stop_name = models.CharField(max_length=50)
+    stop_name = models.CharField(max_length=100)
     node_abbr = models.CharField(max_length=8, blank=True)
     site_name = models.CharField(max_length=80, blank=True)
     facing_dir = models.CharField(max_length=3, blank=True)
