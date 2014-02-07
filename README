@@ -21,7 +21,14 @@ To run the project:
 
 Required files for this project
 ===============================
-You'll need a signup file from the Tulsa Transit Authority to populate your database.  Contact John Whitlock or Luke Crouch to get a copy.
+You'll need a signup file from the Tulsa Transit Authority to populate your
+database.  Contact John Whitlock or Luke Crouch to get a copy.
+
+In March 2013, the Patterns shape file format changed, and dbfpy can not
+read it.  To import recent signups, you'll need to extract the zip file,
+load patterns.dbf in OpenOffice, and re-save it.  Other files can still be
+read w/o modification.  GDAL can read the patterns file, so a switch to
+GeoDjango is in our future.
 
 Other useful information:
 
