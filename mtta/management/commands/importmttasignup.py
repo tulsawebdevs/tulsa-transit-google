@@ -5,6 +5,8 @@ import shutil
 import tempfile
 import zipfile
 
+from django.db import connection
+from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
@@ -49,6 +51,10 @@ class Command(BaseCommand):
         handler.setLevel(level)
         logger.addHandler(handler)
         logger.setLevel(level)
+
+        # Disable database query logging
+        if settings.DEBUG:
+            connection.use_debug_cursor = False
 
         # Extract zip files to temp folder
         tmp_path = None
