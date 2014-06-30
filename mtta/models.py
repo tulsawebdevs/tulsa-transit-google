@@ -708,7 +708,8 @@ class Pattern(models.Model):
         gtfs_shape, created = feed.shape_set.get_or_create(shape_id=shape_id)
         if created:
             for seq, (lat, lon) in enumerate(self.get_points()):
-                gtfs_shape.points.create(sequence=seq, lat=lat, lon=lon)
+                point = 'POINT(%s %s)' % (lon, lat)
+                gtfs_shape.points.create(sequence=seq, point=point)
         return gtfs_shape
 
     def get_points(self):
@@ -821,10 +822,11 @@ class Stop(DbfBase):
         return '%04d' % self.stop_id
 
     def copy_to_feed(self, feed):
+        point = 'POINT(%s %s)' % (self.lon, self.lat)
         gtfs_stop, created = feed.stop_set.get_or_create(
             stop_id=self.gtfs_stop_id, defaults=dict(
-                code=self.stop_id, name=self.stop_name, lat=self.lat,
-                lon=self.lon, desc=self.site_name, location_type=0))
+                code=self.stop_id, name=self.stop_name, point=point,
+                desc=self.site_name, location_type=0))
         return gtfs_stop
 
 
@@ -1442,8 +1444,8 @@ class Trip(models.Model):
         gtfs_shape = self.pattern.copy_to_feed(feed)
         gtfs_trip, created = gtfs_route.trip_set.get_or_create(
             trip_id=trip_id, defaults=dict(
-                headsign=linedir.name, direction=direction, shape=gtfs_shape))
-        gtfs_trip.services.add(gtfs_service)
+                headsign=linedir.name, direction=direction, shape=gtfs_shape,
+                service=gtfs_service))
 
         no_time = self.triptime_set.filter(time='')
         if no_time.exists():

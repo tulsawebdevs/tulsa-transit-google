@@ -14,5 +14,5 @@ simplejson==2.6.2
 pyshp==1.1.9
 mox==0.5.3
 dj-database-url==0.3.0
-multigtfs==0.3
+multigtfs==0.4.0
 gunicorn
