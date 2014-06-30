@@ -3,17 +3,16 @@
 # dbfpy==2.2.5
 http://downloads.sourceforge.net/project/dbfpy/dbfpy/2.2.5/dbfpy-2.2.5.tar.gz?r=http%3A%2F%2Fsourceforge.net%2Fprojects%2Fdbfpy%2Ffile
 
-Django==1.6.1
-django-extensions==1.2.5
-South==0.7.6
-celery==3.0.11
-django-celery==3.0.11
-psycopg2==2.4.4
-pytz==2011n
-simplejson==2.3.2
-wsgiref==0.1.2
+Django==1.6.5
+six==1.7.3
+django-extensions==1.3.8
+South==0.8.4
+django-celery==3.1.10
+psycopg2==2.5.3
+pytz==2014.4
+simplejson==2.6.2
 pyshp==1.1.9
 mox==0.5.3
-dj-database-url==0.2.1
+dj-database-url==0.3.0
 multigtfs==0.3
 gunicorn

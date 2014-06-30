@@ -1,6 +1,6 @@
 # Detect deviations from PEP8 standard formatting, as well as unused
 # and missing variables
-flake8==1.6
+flake8
 # Show what lines are run by test suite
 coverage
 
@@ -9,16 +9,12 @@ ipython
 ipdb
 
 # Better testing
-django-nose==1.0
-nose>=1.0
+django-nose
 
 # For admin documentation
-docutils==0.8.1
+docutils
 
 # For ./manage.py runserver_plus
 Werkzeug
 
-# For postgres linkage
-psycopg2
-
-transitfeed==1.2.12
+transitfeed
