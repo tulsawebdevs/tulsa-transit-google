@@ -654,7 +654,7 @@ class Pattern(models.Model):
         logger.info(
             'Parsing Pattern Shapes (dbf=%s, shp=%s, %s)' %
             (dbf_file.name, shp_file.name,
-            ('shx=%s' % shx_file.name) if shx_file else 'no shx'))
+             ('shx=%s' % shx_file.name) if shx_file else 'no shx'))
         sf = shapefile.Reader(
             dbf=dbf_file, shp=shp_file, shx=shx_file)
         assert sf.shapeType == 3  # PolyLine

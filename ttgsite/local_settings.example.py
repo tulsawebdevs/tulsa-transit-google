@@ -21,16 +21,18 @@ DATABASES = {
 }
 
 # postgres version
-#DATABASES = {
-#    'default': {
-#        'ENGINE': 'django.contrib.gis.db.backends.postgis',
-#        'NAME': 'ttg_project',
-#        'USER': 'ttg',
-#        'PASSWORD': 'ggt',
-#        'HOST': 'localhost',
-#        'PORT': '5432',
-#    }
-#}
+'''
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.contrib.gis.db.backends.postgis',
+        'NAME': 'ttg_project',
+        'USER': 'ttg',
+        'PASSWORD': 'ggt',
+        'HOST': 'localhost',
+        'PORT': '5432',
+    }
+}
+'''
 
 LOCAL_INSTALLED_APPS = []
 # Add django-extensions manage.py commands, like runserver_plus

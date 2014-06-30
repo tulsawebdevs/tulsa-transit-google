@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# flake8: noqa
 import datetime
 from south.db import db
 from south.v2 import SchemaMigration
@@ -208,3 +209,4 @@ class Migration(SchemaMigration):
     }
 
     complete_apps = ['mtta']
+
