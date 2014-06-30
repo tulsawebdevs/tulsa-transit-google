@@ -1,6 +1,8 @@
 from optparse import make_option
 import logging
 import os.path
+import shutil
+import tempfile
 import zipfile
 
 from django.core.management.base import BaseCommand, CommandError
@@ -22,6 +24,8 @@ class Command(BaseCommand):
             raise CommandError('You must pass in the path to the signup.')
         if len(args) > 1:
             raise CommandError('You can only import one signup at a time.')
+
+        # Parse input type
         input_path = args[0]
         if os.path.isdir(input_path):
             is_folder = True
@@ -31,6 +35,8 @@ class Command(BaseCommand):
             raise CommandError(
                 '%s is neither a folder or a .zip file' % input_path)
         name = options.get('name') or SignUp._unset_name
+
+        # Setup logging
         verbosity = int(options.get('verbosity', 1))
         if verbosity == 0:
             level = logging.WARNING
@@ -43,12 +49,29 @@ class Command(BaseCommand):
         handler.setLevel(level)
         logger.addHandler(handler)
         logger.setLevel(level)
+
+        # Extract zip files to temp folder
+        tmp_path = None
+        if not is_folder:
+            tmp_path = tempfile.mkdtemp(prefix='mtta')
+            self.stdout.write(
+                "Extracting %s to %s..." % (input_path, tmp_path))
+            z = zipfile.ZipFile(input_path)
+            z.extractall(tmp_path)
+            input_path = tmp_path
+
+        # Import the signup
         signup = SignUp.objects.create(name=name)
-        if is_folder:
-            signup.import_folder(input_path)
-        else:
-            signup.import_zip(input_path)
+        signup.import_folder(input_path)
+
+        # Set the name to the current time
         if signup.name == SignUp._unset_name:
             signup.name = 'Imported at %s' % timezone.now()
             signup.save()
+
+        # Remove temporary files
+        if tmp_path:
+            self.stdout.write("Removing temporary folder %s" % tmp_path)
+            shutil.rmtree(tmp_path)
+
         self.stdout.write("Successfully imported SignUpFeed %s\n" % (signup))
