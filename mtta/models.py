@@ -4,10 +4,10 @@ import logging
 import re
 import os
 
+from django.contrib.gis.gdal import DataSource
 from django.db import models
 from django.utils import timezone
 from django_extensions.db.fields.json import JSONField
-import dbfpy.dbf
 import shapefile
 
 from mtta.utils import haversine
@@ -271,15 +271,14 @@ class DbfBase(models.Model):
         long_names = dict(
             [(k.upper(), v.upper()) for (k, v) in long_name_pairs])
 
-        # Read all the rows
-        db_f = dbfpy.dbf.Dbf(dbf_file, readOnly=True)
-        rows = [row.asList() for row in db_f]
+        # Load the data
+        ds = DataSource(dbf_file, encoding='latin-1')
+        layer = ds[0]
 
         # Read the field info, count value frequencies
+        field_names = layer.fields
         fields = []
-        for index, field in enumerate(db_f.fieldDefs):
-            name, type_code, length, field_default_value = field.fieldInfo()
-
+        for index, name in enumerate(field_names):
             # Long names come from the names file
             long_name = long_names.get(name.upper())
             if not long_name and name.upper().startswith('TPFIELD'):
@@ -290,8 +289,7 @@ class DbfBase(models.Model):
 
             # Find the value variance
             value_counts = defaultdict(int)
-            for row in rows:
-                val = row[index]
+            for val in layer.get_fields(name):
                 value_counts[val] += 1
 
             # Find the top values
@@ -306,18 +304,14 @@ class DbfBase(models.Model):
             elif long_name in used_names:
                 used_names[long_name] += 1
                 default_value = None
-            elif top_count > (0.5 * len(rows)):
-                if isinstance(top_value, basestring):
-                    default_value = unicode(top_value, encoding='latin-1')
-                else:
-                    default_value = top_value
+            elif top_count > (0.5 * layer.num_feat):
+                default_value = top_value
             else:
                 default_value = None
 
             # Store the field definition
             field_params = dict(
-                name=name, type_code=type_code, length=length,
-                default_value=default_value, index=index,
+                name=name, default_value=default_value, index=index,
                 top_values=values_by_count[:5])
             if long_name:
                 field_params['long_name'] = long_name
@@ -325,7 +319,9 @@ class DbfBase(models.Model):
 
         # Check used fields:
         for name, count in used_names.items():
-            if count != 1:
+            if count == 0:
+                raise Exception('No data for name %s' % name)
+            elif count > 1:
                 dup_fields = []
                 no_problem = True
                 for field in fields:
@@ -350,13 +346,12 @@ class DbfBase(models.Model):
 
         # Convert the rows to minimized dicts
         row_summaries = []
-        for row in rows:
+        for feature in layer:
+            row = [c.value for c in feature]
             summary = list()
             assert len(row) == len(fields)
             for val, field in zip(row, fields):
                 default = field['default_value']
-                if isinstance(val, basestring):
-                    val = unicode(val, encoding='latin-1')
                 if (default is None) or (val != default):
                     summary.append(dict(
                         name=field['name'], index=field['index'], value=val))
@@ -382,13 +377,12 @@ class DbfBase(models.Model):
           need to be created
         '''
         assert hasattr(cls, '_dbf_mapping')
-        dbf_file = _force_to_file(dbf)
         names_file = _force_to_file(names)
         my_name = cls.__name__
         logger.info(
-            'Reading %s data from %s...' % (my_name, dbf_file.name))
+            'Reading %s data from %s...' % (my_name, dbf))
 
-        dbf_fields, dbf_rows = cls.read_dbf(signup, dbf_file, names_file)
+        dbf_fields, dbf_rows = cls.read_dbf(signup, dbf, names_file)
         model_params = []
         for row in dbf_rows:
             # Collect DBF values from row
@@ -436,7 +430,7 @@ class DbfBase(models.Model):
             msg += fmt(*counts[0])
             if len(counts) == 2:
                 msg += ' and %s' % fmt(*counts[1])
-        msg += ' from %s' % dbf_file.name
+        msg += ' from %s' % dbf
         logger.info(msg)
 
     @classmethod
@@ -465,14 +459,14 @@ class Line(DbfBase):
 
     # Map DBF source columns to model fields
     _dbf_mapping = (
-        ('LINEID', 'line_id'),
-        ('LINEABBR', 'line_abbr'),
-        ('LINENAME', 'line_name'),
-        ('LINECOLOR', 'line_color'),
-        ('LINETYPE', 'line_type'),
-        ('LINEDIRID0', 'linedirid0'),
+        ('LineId0', 'line_id'),
+        ('LineAbbr', 'line_abbr'),
+        ('LineName', 'line_name'),
+        ('LineColor', 'line_color'),
+        ('LineType', 'line_type'),
+        ('LineDirId0', 'linedirid0'),
         ('DIRECTIONNAME0', 'directionname0'),
-        ('LINEDIRID1', 'linedirid1'),
+        ('LineDirId1', 'linedirid1'),
         ('DIRECTIONNAME1', 'directionname1'))
 
     @classmethod
@@ -753,15 +747,15 @@ class Stop(DbfBase):
 
     # Map DBF source columns to model fields
     _dbf_mapping = (
-        ('STOPID', 'stop_id'),
-        ('STOPABBR', 'stop_abbr'),
-        ('STOPNAME', 'stop_name'),
-        ('NODEABBR', 'node_abbr'),
-        ('SITENAME', 'site_name'),
-        ('LAT', 'lat'),
-        ('LON', 'lon'),
-        ('INSERVICE', 'in_service'),
-        ('FACINGDIR', 'facing_dir'))
+        ('StopId', 'stop_id'),
+        ('StopAbbr', 'stop_abbr'),
+        ('StopName', 'stop_name'),
+        ('NodeAbbr', 'node_abbr'),
+        ('SiteName', 'site_name'),
+        ('Lat', 'lat'),
+        ('Lon', 'lon'),
+        ('InService', 'in_service'),
+        ('FacingDir', 'facing_dir'))
 
     convert_LAT = DbfBase.convert_latlon
     convert_LON = DbfBase.convert_latlon
@@ -814,13 +808,13 @@ class StopByLine(DbfBase):
 
     # Map DBF source columns to model fields
     _dbf_mapping = (
-        ('STOPID', 'stop_id'),
-        ('LINEDIRID', 'linedir_id'),
-        ('SEQUENCE', 'seq'),
-        ('STOPTYPE', 'stop_type'),
-        ('NODEID', 'node_id'),
-        ('NODEABBR', 'node_abbr'),
-        ('NODENAME', 'node_name'))
+        ('StopId', 'stop_id'),
+        ('LineDirId', 'linedir_id'),
+        ('Sequence', 'seq'),
+        ('StopType', 'stop_type'),
+        ('NodeId', 'node_id'),
+        ('NodeAbbr', 'node_abbr'),
+        ('NodeName', 'node_name'))
 
     @classmethod
     def create_from_dbf(cls, **params):
@@ -866,14 +860,14 @@ class StopByPattern(DbfBase):
 
     # Map DBF source columns to model fields
     _dbf_mapping = (
-        ('STOPID', 'stop_id'),
-        ('LINEDIRID', 'linedir_id'),
-        ('PATTERNID', 'pattern_id'),
-        ('SEQUENCE', 'seq'),
-        ('STOPTYPE', 'stop_type'),
-        ('NODEID', 'node_id'),
-        ('NODEABBR', 'node_abbr'),
-        ('NODENAME', 'node_name'))
+        ('StopId', 'stop_id'),
+        ('LineDirId', 'linedir_id'),
+        ('PatternId', 'pattern_id'),
+        ('Sequence', 'seq'),
+        ('StopType', 'stop_type'),
+        ('NodeId', 'node_id'),
+        ('NodeAbbr', 'node_abbr'),
+        ('NodeName', 'node_name'))
 
     @classmethod
     def create_from_dbf(cls, **params):
