@@ -9,26 +9,22 @@ To run the project:
 1. Install python, pip, virtualenv, and virtualenvwrapper
 2. Run `mkvirtualenv ttg` to create the new virtualenv
 3. Run `pip install -r requirements.txt` to download the third-party libraries
-4. Get a copy of the Tulsa Transit Authority's signup data.  It should be a zip file.
-5. Change to the `ttgsite` folder, copy `local_settings.example.py` to `local_settings.py`, change as needed.
-6. Back in the main folder, run `./manage.py syncdb; ./manage.py migrate` to create a new database.
-6. Run `./manage.py importmttasignup signup.zip` to import into SignUp #1
-6. Run `./manage.py copymttatogtfs 1` to copy SignUp #1 to Feed #1 
-7. Run `./manage.py exportgtfs --name feed.zip 1` to export Feed #1 to feed.zip
-8. Run `feedvalidator.py feed.zip` to validate the feed
-9. Run `schedule_viewer.py feed.zip` to view the schedule
-10. Run `/manage.py runserver` to start up Django.  The Django admin may be the only interesting part.
+4. Install the GeoDjango requirements.  PostgreSQL and PostGIS recommended.
+   See https://docs.djangoproject.com/en/dev/ref/contrib/gis/install/#ref-gis-install
+5. Get a copy of the Tulsa Transit Authority's signup data.  It should be a zip file.
+6. Change to the `ttgsite` folder, copy `local_settings.example.py` to `local_settings.py`, change as needed.
+7. Back in the main folder, run `./manage.py syncdb; ./manage.py migrate` to create a new database.
+8. Run `./manage.py importmttasignup signup.zip` to import into SignUp #1
+9. Run `./manage.py copymttatogtfs 1` to copy SignUp #1 to Feed #1 
+10. Run `./manage.py exportgtfs --name feed.zip 1` to export Feed #1 to feed.zip
+11. Run `feedvalidator.py feed.zip` to validate the feed
+12. Run `schedule_viewer.py feed.zip` to view the schedule
+13. Run `/manage.py runserver` to start up Django.  The Django admin may be the only interesting part.
 
 Required files for this project
 ===============================
 You'll need a signup file from the Tulsa Transit Authority to populate your
 database.  Contact John Whitlock or Luke Crouch to get a copy.
-
-In March 2013, the Patterns shape file format changed, and dbfpy can not
-read it.  To import recent signups, you'll need to extract the zip file,
-load patterns.dbf in OpenOffice, and re-save it.  Other files can still be
-read w/o modification.  GDAL can read the patterns file, so a switch to
-GeoDjango is in our future.
 
 Other useful information:
 
