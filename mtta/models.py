@@ -8,7 +8,6 @@ from django.contrib.gis.gdal import DataSource
 from django.db import models
 from django.utils import timezone
 from django_extensions.db.fields.json import JSONField
-import shapefile
 
 from mtta.utils import haversine
 from multigtfs.models import Feed
@@ -598,45 +597,26 @@ class Pattern(models.Model):
             'Parsing Pattern Shapes (dbf=%s, shp=%s, %s)' %
             (dbf_file.name, shp_file.name,
              ('shx=%s' % shx_file.name) if shx_file else 'no shx'))
-        sf = shapefile.Reader(
-            dbf=dbf_file, shp=shp_file, shx=shx_file)
-        assert sf.shapeType == 3  # PolyLine
-        shapes = sf.shapes()
-        PATTERN_ID_FIELD = 1
-        PATTERN_FIELD = 2
-        LINEDIR_ID_FIELD = 3
-        assert sf.fields[PATTERN_ID_FIELD][0].upper() == 'PatternId'.upper(),\
-            sf.fields[PATTERN_ID_FIELD][0]
-        assert sf.fields[PATTERN_FIELD][0].upper() == 'Pattern'.upper(),\
-            sf.fields[PATTERN_FIELD][0]
-        assert sf.fields[LINEDIR_ID_FIELD][0].upper() == 'LineDirId'.upper(),\
-            sf.fields[LINEDIR_ID_FIELD][0]
+
+        ds = DataSource(shp)
+        layer = ds[0]
+        assert layer.geom_type.name == 'LineString'
+        shapes = layer.get_geoms()
         pattern_cnt, point_cnt = 0, 1
-        for record, shape in zip(sf.records(), shapes):
-            assert shape.shapeType == 3
-            pattern_id = record[PATTERN_ID_FIELD - 1]
-            pattern = record[PATTERN_FIELD - 1]
-            linedir_id = record[LINEDIR_ID_FIELD - 1]
+        for feature, shape in zip(layer, shapes):
+            assert shape.geom_name == 'MULTILINESTRING'
+            pattern_id = feature['PatternId'].value
+            pattern = feature['Pattern'].value
+            linedir_id = feature['LineDirId'].value
             linedir = LineDirection.objects.get(
                 line__signup=signup, linedir_id=linedir_id)
+
             # Pattern is a sequence of point pairs
             parts = []
-            part = None
-            for seq, (lon, lat) in enumerate(shape.points):
-                if seq in shape.parts:
-                    # Start of a new shape
-                    if part:
-                        # Parts could have more than 2 points, but MTTA
-                        # data has only 2-point parts
-                        assert len(part) == 2
-                        if part[0] != part[1]:
-                            # If not a point
-                            part.sort()
-                            parts.append((part[0], part[1]))
-                    part = []
-                part.append((lat, lon))
-            if part:
-                parts.append((part[0], part[1]))
+            for pt1, pt2 in shape.coords:
+                if pt1 != pt2:
+                    part = sorted((pt1, pt2))
+                    parts.append((part[0], part[1]))
             point_cnt += 2 * len(parts)
             cls.objects.create(
                 pattern_id=pattern_id, name=pattern, linedir=linedir,
@@ -706,7 +686,9 @@ class Pattern(models.Model):
                             (last_node, node2, node1))])
                     n1, n2, n3 = node_orders[0][1]
                     # Optimize for tail point in the new segment
-                    if n1 == n2 or n2 == n3:
+                    if n1 == n2:
+                        line.append(n3)
+                    elif n2 == n3:
                         line.append(n3)
                     elif node_dist(n1, n2) < min_add_dist:
                         log_action('Adding segment', n1, n2)
