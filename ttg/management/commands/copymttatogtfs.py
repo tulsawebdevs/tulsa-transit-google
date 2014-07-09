@@ -18,7 +18,7 @@ class Command(BaseCommand):
         try:
             signup = SignUp.objects.get(id=signup_id)
         except SignUp.DoesNotExist:
-            raise CommandError('No signup %d found.' % signup_id)
+            raise CommandError('No signup %s found.' % signup_id)
         verbosity = int(options.get('verbosity', 1))
         if verbosity == 0:
             level = logging.WARNING
