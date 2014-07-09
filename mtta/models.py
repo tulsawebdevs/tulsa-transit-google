@@ -630,7 +630,7 @@ class Pattern(models.Model):
         shape_id = "%s_%s" % (self.pattern_id, self.name)
         gtfs_shape, created = feed.shape_set.get_or_create(shape_id=shape_id)
         if created:
-            for seq, (lat, lon) in enumerate(self.get_points()):
+            for seq, (lon, lat) in enumerate(self.get_points()):
                 point = 'POINT(%s %s)' % (lon, lat)
                 gtfs_shape.points.create(sequence=seq, point=point)
         return gtfs_shape
