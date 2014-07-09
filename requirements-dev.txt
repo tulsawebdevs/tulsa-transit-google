@@ -17,4 +17,7 @@ docutils
 # For ./manage.py runserver_plus
 Werkzeug
 
+# Google chose not to host on pypi
+--allow-external transitfeed
+--allow-unverified transitfeed
 transitfeed
