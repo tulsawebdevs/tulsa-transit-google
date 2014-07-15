@@ -1071,6 +1071,7 @@ class TripDay(models.Model):
                         tripday=tripday, pattern=pattern, seq=trip_seq)
                     trip_seq += 1
                     trip_cnt += 1
+
                     # Parse TripTime
                     for time_seq, (start, end) in enumerate(data_bounds):
                         time = linein[start:end].strip()
@@ -1397,7 +1398,7 @@ class TripTime(models.Model):
     '''A stop time for a Trip'''
     trip = models.ForeignKey(Trip)
     tripstop = models.ForeignKey(TripStop)
-    time = models.CharField(max_length=5)
+    time = models.CharField(max_length=6)
 
     def __unicode__(self):
         return "%s-%s" % (self.tripstop, self.time)
@@ -1406,12 +1407,31 @@ class TripTime(models.Model):
         unique_together = ordering = ('trip', 'tripstop')
         ordering = ('trip', 'tripstop', 'time')
 
+    @property
+    def normalized_time(self):
+        if self.time.endswith(('a', 'p', 'x')):
+            suffix = self.time[-1]
+            hour_str, minute = self.time[:-1].split(':')
+            hour = int(hour_str)
+            if hour == 12:
+                if suffix == 'x':
+                    hour += 12
+            else:
+                if suffix == 'p':
+                    hour += 12
+                elif suffix == 'x':
+                    hour += 24
+            out_time = '%s:%s' % (hour, minute)
+            return out_time
+        else:
+            return self.time
+
     def copy_to_feed(self, feed, gtfs_trip, force_time):
         if not self.tripstop.stop:
             logger.info('Skipping TripTime "%s" - no stop' % self)
             return
         if self.time and (self.tripstop.scheduled or force_time):
-            time = self.time
+            time = self.normalized_time
         else:
             time = None
         if force_time and not time:
@@ -1420,7 +1440,7 @@ class TripTime(models.Model):
         if hasattr(self.tripstop, 'departure'):
             d = self.trip.triptime_set.filter(tripstop=self.tripstop.departure)
             if d.exists():
-                departure_time = d[0].time
+                departure_time = d[0].normalized_time
             else:
                 # The departure stop is not part of this trip
                 departure_time = time

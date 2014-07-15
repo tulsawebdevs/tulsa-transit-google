@@ -1,7 +1,7 @@
 import StringIO
 
 from django.test import TestCase
-from multigtfs.models import Feed
+from multigtfs.models import Feed, StopTime
 import mox
 
 from mtta.models import (
@@ -524,6 +524,80 @@ Pattern      123Ar         Adm/MemE
         self.mox.VerifyAll()
         self.assert_expected_trip_object_counts_100()
 
+    def test_import_100_am_pm(self):
+        '''
+        Import a schedule where times have a/p suffix
+
+        The July 2014 signup used this format
+        '''
+        self.setup_100()
+        schedule = """\
+Stop Trips
+~~~~~~~~~~
+
+SignUp:       TEST JULY 2014
+Service:      1
+Line:         100
+Exception:    Off
+Printed:      09-09-2012 17:08
+
+Direction:    To Downtown
+
+Pattern  INT  VAL      123Ar           Adm/MemE
+                        5498    5440       5478
+~~~~~~~  ~~~  ~~~  ~~~~~~~~~  ~~~~~~   ~~~~~~~~
+
+     01    I    V     10:20a  10:24a     10:30a
+
+"""
+        mtta.models._mockable_open('100.txt', 'rb').AndReturn(
+            StringIO.StringIO(schedule))
+        self.mox.ReplayAll()
+        TripDay.import_schedule(self.signup, '100.txt')
+        self.mox.VerifyAll()
+        self.assert_expected_trip_object_counts_100()
+        service = Service.objects.get(signup=self.signup)
+        self.assertEqual(service.service_id, 1)
+        tripday = TripDay.objects.get()
+        self.assertEqual(tripday.linedir, self.linedirs['100-0'])
+        self.assertEqual(tripday.service, service)
+        ts0, ts1, ts2 = TripStop.objects.all()
+        # 123Ar/Arch124a - Timing node
+        self.assertEqual(ts0.seq, 0)
+        self.assertEqual(ts0.tripday, tripday)
+        self.assertEqual(ts0.stop_abbr, '5498')
+        self.assertEqual(ts0.stop, self.stops[5498])
+        self.assertEqual(ts0.node_abbr, '123Ar')
+        self.assertEqual(ts0.node, self.nodes[635])
+        # Adm106p - Stop
+        self.assertEqual(ts1.seq, 1)
+        self.assertEqual(ts1.tripday, tripday)
+        self.assertEqual(ts1.stop_abbr, '5440')
+        self.assertEqual(ts1.stop, self.stops[5440])
+        self.assertEqual(ts1.node_abbr, '')
+        self.assertEqual(ts1.node, None)
+        # Adm/MemE / AdmMem - Timing Node
+        self.assertEqual(ts2.tripday, tripday)
+        self.assertEqual(ts2.seq, 2)
+        self.assertEqual(ts2.stop_abbr, '5478')
+        self.assertEqual(ts2.stop, self.stops[5478])
+        self.assertEqual(ts2.node_abbr, 'Adm/MemE')
+        self.assertEqual(ts2.node, self.nodes[736])
+        trip = Trip.objects.get()
+        self.assertEqual(trip.seq, 0)
+        self.assertEqual(trip.tripday, tripday)
+        self.assertEqual(trip.pattern, self.patterns['100-01'])
+        tt0, tt1, tt2 = TripTime.objects.all()
+        self.assertEqual(tt0.trip, trip)
+        self.assertEqual(tt0.tripstop, ts0)
+        self.assertEqual(tt0.time, '10:20a')
+        self.assertEqual(tt1.trip, trip)
+        self.assertEqual(tt1.tripstop, ts1)
+        self.assertEqual(tt1.time, '10:24a')
+        self.assertEqual(tt2.trip, trip)
+        self.assertEqual(tt2.tripstop, ts2)
+        self.assertEqual(tt2.time, '10:30a')
+
     def test_880F_non_timing_nodes(self):
         '''For some flex lines, nodes are not timing nodes'''
         self.setup_880F()
@@ -919,7 +993,7 @@ Pattern      123Ar            Arr MMS2  Lv MMS2  Adm/MemE
 
 """
         self.setup_100()
-        # Move Adm/MemE to 5
+        # Move Adm/MemE to 51G/
         self.linedirs['100-0'].stopbyline_set.filter(seq=3).update(seq=5)
         self.patterns['100-01'].stopbypattern_set.filter(seq=3).update(seq=5)
         # Arr MMS2/MBAY2
@@ -1065,3 +1139,88 @@ from_stop_id,to_stop_id,transfer_type,min_transfer_time
         self.assertEqual(gtfs_transfer.to_stop, gtfs_stop_5440)
         self.assertEqual(gtfs_transfer.transfer_type, 0)
         self.assertEqual(gtfs_transfer.min_transfer_time, None)
+
+
+class TripTimeTest(TestCase):
+    def setUp(self):
+        self.signup = SignUp.objects.create(name=SignUp._unset_name)
+        Fare.objects.create(cost='5.00')
+
+        self.line = self.signup.line_set.create(
+            line_id=2893, line_abbr='100', line_name='Admiral',
+            line_color=12910532, line_type='FX')
+        linedir = self.line.linedirection_set.create(
+            linedir_id=28930, name='To Downtown')
+        pattern = linedir.pattern_set.create(
+            name='01', pattern_id=11431, raw_pattern=[[300, 500]])
+        stop = self.signup.stop_set.create(
+            stop_id=5498, stop_abbr='Arch124a',
+            node_abbr='123ARCH', lon='-95.83969', lat='36.162776',
+            stop_name='E Archer St&N 124th E Ave/N 123Rd E', in_service=True)
+
+        service = Service.objects.create(
+            signup=self.signup, service_id=1, monday=True, tuesday=True,
+            wednesday=True, thursday=True, friday=True, saturday=False,
+            sunday=False, start_date='2012-09-20', end_date='2013-12-31')
+
+        self.tripday = TripDay.objects.create(
+            linedir=linedir, service=service)
+        self.tripstop = TripStop.objects.create(
+            tripday=self.tripday, stop_abbr='5498', stop=stop, seq=1,
+            scheduled=True)
+        self.trip = Trip.objects.create(
+            tripday=self.tripday, pattern=pattern, seq=1)
+
+    def test_copy_to_feed_military_time(self):
+        TripTime.objects.create(
+            trip=self.trip, tripstop=self.tripstop, time='18:00')
+        feed = Feed.objects.create()
+        self.line.copy_to_feed(feed)
+
+        stoptime = StopTime.objects.get()
+        self.assertEqual('18:00:00', str(stoptime.arrival_time))
+
+    def test_copy_to_feed_am(self):
+        TripTime.objects.create(
+            trip=self.trip, tripstop=self.tripstop, time='10:00a')
+        feed = Feed.objects.create()
+        self.line.copy_to_feed(feed)
+
+        stoptime = StopTime.objects.get()
+        self.assertEqual('10:00:00', str(stoptime.arrival_time))
+
+    def test_copy_to_feed_pm(self):
+        TripTime.objects.create(
+            trip=self.trip, tripstop=self.tripstop, time='10:00p')
+        feed = Feed.objects.create()
+        self.line.copy_to_feed(feed)
+
+        stoptime = StopTime.objects.get()
+        self.assertEqual('22:00:00', str(stoptime.arrival_time))
+
+    def test_copy_to_feed_12pm(self):
+        TripTime.objects.create(
+            trip=self.trip, tripstop=self.tripstop, time='12:00p')
+        feed = Feed.objects.create()
+        self.line.copy_to_feed(feed)
+
+        stoptime = StopTime.objects.get()
+        self.assertEqual('12:00:00', str(stoptime.arrival_time))
+
+    def test_copy_to_feed_xm(self):
+        TripTime.objects.create(
+            trip=self.trip, tripstop=self.tripstop, time='1:00x')
+        feed = Feed.objects.create()
+        self.line.copy_to_feed(feed)
+
+        stoptime = StopTime.objects.get()
+        self.assertEqual('25:00:00', str(stoptime.arrival_time))
+
+    def test_copy_to_feed_12xm(self):
+        TripTime.objects.create(
+            trip=self.trip, tripstop=self.tripstop, time='12:00x')
+        feed = Feed.objects.create()
+        self.line.copy_to_feed(feed)
+
+        stoptime = StopTime.objects.get()
+        self.assertEqual('24:00:00', str(stoptime.arrival_time))
