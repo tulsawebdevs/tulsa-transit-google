@@ -1,3 +1,9 @@
+**This project is archived.**
+*Tulsa Transit began publishing their GTFS data in 2013, and now the 
+[Tulsa bus schedule is available in Google Maps](https://www.tulsaworld.com/news/local/government-and-politics/tulsa-transit-schedules-integrated-into-google-maps/article_8d65eea9-9d31-5d89-aedd-9ca525eab424.html)
+and other trip planning software. Tulsa Transit does not use this project to
+generate their GTFS feed.*
+
 This project is for converting is the code a transit 'signup' from the
 Metropolitan Tulsa Transit Authority (MTTA) into a General Transit Feed
 Specification (GTFS), that can be used with other transit software such as
@@ -33,9 +39,3 @@ Other useful information:
 * http://nrtap.zendesk.com/home
 * http://tripplanner.tulsawebdevs.org/index.html
 * http://www.gtfs-data-exchange.com/
-
-John Whitlock
-John-Whitlock@ieee.org
-http://tulsawebdevs.org
-
-On freenode: #tulsawebdevs
